@@ -1,7 +1,7 @@
 import json
 import shutil
 import threading
-from typing import List, Dict, Any  # <-- LINHA ADICIONADA
+from typing import List, Dict, Any
 from datetime import datetime
 
 import config
@@ -69,6 +69,12 @@ def carregar_dados() -> Dict:
     dados = estado_inicial()
     return dados
 
+def resumo_persistencia() -> str:
+    """Mostra resumo do estado da persistência"""
+    total_tbr = sum(len(v) for v in dados.get("tbr_por_mes", {}).values())
+    total_lidos = len(dados.get("livros_lidos", []))
+    return f"TBR: **{total_tbr}** livros | Lidos: **{total_lidos}**"
+
 def guardar_dados() -> None:
     with _dados_lock:
         try:
@@ -79,5 +85,6 @@ def guardar_dados() -> None:
             if config.DATA_FILE.exists():
                 shutil.copy2(config.DATA_FILE, config.BACKUP_FILE)
             temp.replace(config.DATA_FILE)
+            print(f"💾 Dados guardados em: {config.DATA_FILE}")
         except Exception as e:
             print(f"⚠️ Erro ao guardar: {e}")
