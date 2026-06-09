@@ -60,6 +60,54 @@ def carregar_dados() -> Dict:
         try:
             with open(config.DATA_FILE, "r", encoding="utf-8") as f:
                 dados = aplicar_dados_carregados(json.load(f))
+            print("📂 Dados carregados")
+        except Exception as e:
+            print(f"⚠️ Erro ao carregar: {e}")
+            dados = estado_inicial()
+    else:
+        dados = estado_inicial()
+    return dados
+
+
+def guardar_dados() -> None:
+    with _dados_lock:
+        try:
+            config.DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(config.DATA_FILE, "w", encoding="utf-8") as f:
+                json.dump(dados, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"⚠️ Erro ao guardar: {e}")
+
+
+def resumo_persistencia() -> str:
+    total_tbr = sum(len(v) for v in dados.get("tbr_por_mes", {}).values())
+    total_lidos = len(dados.get("livros_lidos", []))
+    return f"TBR: **{total_tbr}** livros | Lidos: **{total_lidos}**"            copia["nota"] = estrelas_para_nota(str(copia.get("estrelas", "")))
+        if "data_leitura" not in copia:
+            copia["data_leitura"] = copia.get("data_leitura", "")
+        resultado.append(copia)
+    return resultado
+
+
+def aplicar_dados_carregados(bruto: Dict) -> Dict:
+    base = estado_inicial()
+    base.update(bruto)
+    base["tbr_por_mes"] = {mes: list(livros) for mes, livros in bruto.get("tbr_por_mes", {}).items()}
+    base["desafio_alfabeto"] = {**estado_inicial()["desafio_alfabeto"], **(bruto.get("desafio_alfabeto") if isinstance(bruto.get("desafio_alfabeto"), dict) else {})}
+    base["sugestoes_vistas"] = list(bruto.get("sugestoes_vistas", []))
+    base["sorteios_mes"] = dict(bruto.get("sorteios_mes", {}))
+    base["livros_lidos"] = migrar_livros_lidos(bruto.get("livros_lidos", []))
+    base["lembretes_metas"] = list(bruto.get("lembretes_metas", []))
+    base["review_em_andamento"] = dict(bruto.get("review_em_andamento", {}))
+    return base
+
+
+def carregar_dados() -> Dict:
+    global dados
+    if config.DATA_FILE.exists():
+        try:
+            with open(config.DATA_FILE, "r", encoding="utf-8") as f:
+                dados = aplicar_dados_carregados(json.load(f))
             print(f"📂 Dados carregados")
         except Exception as e:
             print(f"⚠️ Erro ao carregar: {e}")
