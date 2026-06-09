@@ -1,40 +1,68 @@
-#!/usr/bin/env python3
-"""
-COSMO BOT - Bot de leituras com TBR, leituras conjuntas, desafios e Bookstagram
-Versão modularizada com IA híbrida (Gemini + DeepSeek)
-"""
-
+import asyncio
+import logging
 import discord
 from discord.ext import commands
-import logging
 
 import config
-from storage import carregar_dados, guardar_dados, dados, resumo_persistencia
+from storage import carregar_dados, guardar_dados, dados
 from tasks import autosave_loop, verificar_lembretes_loop, resumos_automaticos_loop, verificar_lc_concluidas_loop
 
-# ==============================================================================
-# LOGGING
-# ==============================================================================
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('cosmo_bot.log'),
-        logging.StreamHandler()
-    ]
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('CosmoBot')
-
-# ==============================================================================
-# BOT
-# ==============================================================================
 
 intents = discord.Intents.default()
 intents.message_content = True
-
 bot = commands.Bot(command_prefix=config.COMMAND_PREFIX, intents=intents)
 
+
+async def carregar_cogs():
+    await bot.load_extension("commands.tbr")
+    await bot.load_extension("commands.reading")
+    await bot.load_extension("commands.challenges")
+    await bot.load_extension("commands.lc")
+    await bot.load_extension("commands.recommendations")
+    await bot.load_extension("commands.bookstagram")
+    await bot.load_extension("commands.stats_cog")
+    await bot.load_extension("commands.extras")
+    await bot.load_extension("commands.admin")
+    logger.info("✅ Todos os cogs carregados!")
+
+
+@bot.event
+async def on_ready():
+    logger.info(f"👑 {bot.user} está online!")
+    await carregar_cogs()
+    if not autosave_loop.is_running():
+        autosave_loop.start()
+    if not verificar_lembretes_loop.is_running():
+        verificar_lembretes_loop.start()
+    if not resumos_automaticos_loop.is_running():
+        resumos_automaticos_loop.start(bot)
+    if not verificar_lc_concluidas_loop.is_running():
+        verificar_lc_concluidas_loop.start(bot)
+
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+    await bot.process_commands(message)
+
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"❌ Falta informação. Usa `{config.COMMAND_PREFIX}guia` para ajuda.")
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send("❌ Formato inválido.")
+    else:
+        logger.error(f"Erro: {error}")
+        await ctx.send(f"❌ Erro: {error}")
+
+
+if __name__ == "__main__":
+    carregar_dados()
+    bot.run(config.DISCORD_TOKEN)
 
 # ==============================================================================
 # EVENTOS
