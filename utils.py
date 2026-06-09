@@ -1,40 +1,100 @@
 import re
 import unicodedata
 import hashlib
-import asyncio
 from datetime import datetime
 from typing import List, Optional, Tuple, Dict, Any
 import discord
-
 import config
 
-# ========== FUNÇÕES DE LIVROS ==========
 
 def formatar_livro(titulo: str, autor: str) -> str:
-    titulo = titulo.strip()
-    autor = autor.strip()
     if config.SEPARADOR_LIVRO in titulo:
         return titulo
-    if not autor:
-        raise ValueError("autor_obrigatorio")
     return f"{titulo}{config.SEPARADOR_LIVRO}{autor}"
 
+
 def parsear_livro(texto: str) -> Tuple[str, str]:
-    texto = texto.strip()
     if config.SEPARADOR_LIVRO not in texto:
         raise ValueError("autor_obrigatorio")
     titulo, autor = texto.rsplit(config.SEPARADOR_LIVRO, 1)
     return titulo.strip(), autor.strip()
+
 
 def livro_completo(texto: str) -> str:
     if config.SEPARADOR_LIVRO in texto:
         return texto.strip()
     raise ValueError("autor_obrigatorio")
 
+
+def hoje_str() -> str:
+    return datetime.now().strftime("%d/%m/%Y")
+
+
+def este_ano() -> str:
+    return datetime.now().strftime("%Y")
+
+
+def data_valida(data_texto: str) -> bool:
+    try:
+        datetime.strptime(data_texto, "%d/%m/%Y")
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def normalizar_categoria(categoria: str) -> str:
+    return categoria.strip().capitalize()
+
+
 def normalizar_titulo(titulo: str) -> str:
     return re.sub(r'^[~!@#$%^&*()_+{}\[\]:;<>?/\\|]+\s*', '', titulo)
 
+
+def estrelas_para_texto(nota: float) -> str:
+    if nota <= 0:
+        return "Sem avaliação"
+    cheias = int(nota)
+    resto = round(nota - cheias, 2)
+    texto = "⭐" * cheias
+    if resto == 0.25:
+        texto += "¼"
+    elif resto == 0.5:
+        texto += "½"
+    elif resto == 0.75:
+        texto += "¾"
+    elif resto > 0:
+        texto += f" ({nota})"
+    return texto
+
+
+def estrelas_para_nota(estrelas: str) -> float:
+    if not estrelas or estrelas == "Sem avaliação":
+        return 0.0
+    nota = estrelas.count("⭐")
+    if "¼" in estrelas:
+        nota += 0.25
+    elif "½" in estrelas:
+        nota += 0.5
+    elif "¾" in estrelas:
+        nota += 0.75
+    return nota
+
+
+def nota_valida(nota: float) -> bool:
+    if nota < 0.25 or nota > 5:
+        return False
+    return round(nota * 4) % 4 == 0
+
+
 def safe_custom_id(base: str, max_len: int = 100) -> str:
+    if len(base) <= max_len:
+        return base
+    return f"{base[:max_len-9]}_{hashlib.md5(base.encode()).hexdigest()[:8]}"
+
+
+async def enviar_mensagem_longa(canal, texto, limite=1900):
+    for i in range(0, len(texto), limite):
+        await canal.send(texto[i:i+limite])def safe_custom_id(base: str, max_len: int = 100) -> str:
     if len(base) <= max_len:
         return base
     hash_sufixo = hashlib.md5(base.encode()).hexdigest()[:8]
