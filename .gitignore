@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+.env
+venv/
+.venv/
+env/
+ENV/
+
+# Bot data
+data/*.json
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
