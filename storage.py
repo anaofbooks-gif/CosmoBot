@@ -81,29 +81,7 @@ def guardar_dados():
 
 def resumo_persistencia() -> str:
     total_tbr = sum(len(v) for v in dados.get("tbr_por_mes", {}).values())
-    return f"TBR: **{total_tbr}** livros | Lidos: **{len(dados.get('livros_lidos', []))}**"            copia["titulo"] = formatar_livro(titulo, str(copia["autor"]))
-        if "nota" not in copia and copia.get("estrelas") not in (None, "Sem avaliação"):
-            copia["nota"] = estrelas_para_nota(str(copia.get("estrelas", "")))
-        if "data_leitura" not in copia:
-            copia["data_leitura"] = copia.get("data_leitura", "")
-        resultado.append(copia)
-    return resultado
-
-def aplicar_dados_carregados(bruto: Dict) -> Dict:
-    base = estado_inicial()
-    base.update(bruto)
-    base["tbr_por_mes"] = {mes: list(livros) for mes, livros in bruto.get("tbr_por_mes", {}).items()}
-    base["desafio_alfabeto"] = {**estado_inicial()["desafio_alfabeto"], **(bruto.get("desafio_alfabeto") if isinstance(bruto.get("desafio_alfabeto"), dict) else {})}
-    base["sugestoes_vistas"] = list(bruto.get("sugestoes_vistas", []))
-    base["sorteios_mes"] = dict(bruto.get("sorteios_mes", {}))
-    base["livros_lidos"] = migrar_livros_lidos(bruto.get("livros_lidos", []))
-    base["lembretes_metas"] = list(bruto.get("lembretes_metas", []))
-    base["review_em_andamento"] = dict(bruto.get("review_em_andamento", {}))
-    return base
-
-def carregar_dados() -> Dict:
-    global dados
-    if config.DATA_FILE.exists():
+    return f"TBR: **{total_tbr}** livros | Lidos: **{len(dados.get('livros_lidos', []))}**"    if config.DATA_FILE.exists():
         try:
             with open(config.DATA_FILE, "r", encoding="utf-8") as f:
                 bruto = json.load(f)
