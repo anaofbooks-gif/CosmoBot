@@ -1,3 +1,4 @@
+import logging
 import discord
 from discord.ext import commands
 import asyncio
@@ -12,6 +13,7 @@ from ai import ai_json_hibrido, validar_resposta_ia_pydantic, validar_resposta_i
 from models import RespostaMetas
 from images import desenhar_calendario_leituras, gerar_fundo_calendario, Image
 
+logger = logging.getLogger('CosmoBot')
 
 class LCCog(commands.Cog):
     def __init__(self, bot):
