@@ -1,14 +1,11 @@
 import discord
 from discord.ext import commands
-import logging
+from datetime import datetime
 
 import config
 from storage import dados, guardar_dados
 from utils import enviar_mensagem_longa
 from ai import ai_text_com_retry, extrair_texto_da_imagem
-from datetime import datetime
-
-logger = logging.getLogger('CosmoBot')
 
 
 class BookstagramCog(commands.Cog):
@@ -51,7 +48,6 @@ class BookstagramCog(commands.Cog):
         await ctx.message.add_reaction("📥")
 
     @commands.command(name="gerar")
-    @commands.cooldown(1, 15, commands.BucketType.user)  # 1 vez a cada 15 segundos
     async def gerar(self, ctx):
         user_id = str(ctx.author.id)
         if user_id not in dados["review_em_andamento"]:
@@ -101,7 +97,6 @@ Write only the caption, no extra text.
             guardar_dados()
             await ctx.send("🎨 Review finalizada! Tudo o que capturaste foi usado. Podes começar uma nova review com `!desabafar` quando quiseres.")
         except Exception as e:
-            logger.exception(f"Erro ao gerar review: {e}")
             await ctx.send(f"❌ Erro ao gerar legenda: {e}")
 
     @commands.command(name="review")
@@ -121,7 +116,6 @@ Write only the caption, no extra text.
             res = await ai_text_com_retry(prompt)
             await enviar_mensagem_longa(ctx, f"✨ **TRENDS INSTAGRAM** ✨\n\n{res}")
         except Exception as e:
-            logger.exception(f"Erro ao gerar trends: {e}")
             await ctx.send(f"❌ Erro ao gerar trends: {e}")
 
     @commands.command(name="vibe")
@@ -131,7 +125,6 @@ Write only the caption, no extra text.
             res = await ai_text_com_retry(prompt)
             await enviar_mensagem_longa(ctx, f"📸 **BOOKSTAGRAM MOODBOARD VIBE:**\n\n{res}")
         except Exception as e:
-            logger.exception(f"Erro ao gerar vibe: {e}")
             await ctx.send(f"❌ Erro ao gerar vibe: {e}")
 
 
