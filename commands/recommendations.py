@@ -116,6 +116,20 @@ RESPONDE APENAS COM JSON:
             logger.exception(f"Erro ao processar recomendações: {e}")
             await ctx.send(f"❌ Erro ao processar recomendações: {e}")
 
+    @commands.command(name="testeia")
+    async def teste_ia(self, ctx):
+        """Comando de teste para verificar se a IA está a responder"""
+        await ctx.send("🔍 A testar ligação à IA...")
+        
+        prompt = 'Responde APENAS com JSON: {"teste": "funcionou"}'
+        
+        try:
+            from ai import ai_json_com_retry
+            resposta = await ai_json_com_retry(prompt)
+            await ctx.send(f"✅ IA respondeu: {resposta}")
+        except Exception as e:
+            await ctx.send(f"❌ Erro na IA: {e}")
+
     @commands.command(name="marcarsugestoes")
     async def marcar_sugestoes_vistas(self, ctx, *, titulos: str):
         vistos = {v.lower().strip() for v in dados.setdefault("sugestoes_vistas", [])}
@@ -128,19 +142,6 @@ RESPONDE APENAS COM JSON:
         guardar_dados()
         await ctx.send(f"✅ **{novos}** sugestão(ões) arquivada(s).")
 
-@commands.command(name="testeia")
-async def teste_ia(self, ctx):
-    """Comando de teste para verificar se a IA está a responder"""
-    await ctx.send("🔍 A testar ligação à IA...")
-    
-    prompt = 'Responde APENAS com JSON: {"teste": "funcionou"}'
-    
-    try:
-        from ai import ai_json_com_retry
-        resposta = await ai_json_com_retry(prompt)
-        await ctx.send(f"✅ IA respondeu: {resposta}")
-    except Exception as e:
-        await ctx.send(f"❌ Erro na IA: {e}")
-        
+
 async def setup(bot):
     await bot.add_cog(RecommendationsCog(bot))
