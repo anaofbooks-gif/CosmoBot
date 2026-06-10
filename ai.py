@@ -68,10 +68,8 @@ async def ai_text_hibrido(prompt: str) -> str:
 
 
 async def ai_json_hibrido(prompt: str) -> Dict[str, Any]:
-    """Tenta obter JSON usando o Gemini; se falhar, recorre ao DeepSeek."""
     logger.info(f"📤 Enviando prompt para IA (tamanho: {len(prompt)} caracteres)")
     
-    # 1. Tentativa com Gemini
     if ai_client:
         try:
             response = ai_client.models.generate_content(
@@ -81,17 +79,16 @@ async def ai_json_hibrido(prompt: str) -> Dict[str, Any]:
             )
             txt = response.text if response.text else "{}"
             txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.IGNORECASE)
-            logger.info(f"✅ Gemini respondeu com {len(txt)} caracteres")
+            logger.info(f"✅ Gemini respondeu: {txt[:200]}...")
             return json.loads(txt)
         except Exception as e:
             logger.warning(f"Gemini JSON falhou: {e}")
 
-    # 2. Fallback para DeepSeek
     if config.DEEPSEEK_API_KEY:
         headers = {"Authorization": f"Bearer {config.DEEPSEEK_API_KEY}", "Content-Type": "application/json"}
         payload = {
             "model": "deepseek-chat",
-            "messages": [{"role": "user", "content": f"{prompt}\n\nResponde APENAS com JSON válido, sem texto adicional."}],
+            "messages": [{"role": "user", "content": f"{prompt}\n\nResponde APENAS com JSON válido."}],
             "temperature": 0.2,
             "response_format": {"type": "json_object"}
         }
@@ -102,7 +99,7 @@ async def ai_json_hibrido(prompt: str) -> Dict[str, Any]:
                         res_json = await resp.json()
                         txt = res_json["choices"][0]["message"]["content"]
                         txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.IGNORECASE)
-                        logger.info(f"✅ DeepSeek respondeu com {len(txt)} caracteres")
+                        logger.info(f"✅ DeepSeek respondeu: {txt[:200]}...")
                         return json.loads(txt)
                     else:
                         logger.error(f"DeepSeek respondeu com status {resp.status}")
