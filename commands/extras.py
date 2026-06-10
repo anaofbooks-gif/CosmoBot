@@ -17,6 +17,7 @@ class ExtrasCog(commands.Cog):
         self.bot = bot
 
     @commands.command(name="entrevista")
+    @commands.cooldown(1, 20, commands.BucketType.user)
     async def entrevista(self, ctx, personagem: str, *, pergunta: str):
         await ctx.send(f"🔮 A invocar o espírito de {personagem}...")
         prompt = f"Assume integralmente a personalidade da personagem fictícia '{personagem}'. Responde estritamente na primeira pessoa, em português de Portugal. Pergunta: '{pergunta}'"
@@ -38,6 +39,7 @@ class ExtrasCog(commands.Cog):
             await ctx.send(f"❌ Erro ao gerar sugestões: {e}")
 
     @commands.command(name="teoria")
+    @commands.cooldown(1, 15, commands.BucketType.user)
     async def teoria(self, ctx, *, teoria: str):
         prompt = f"Uma leitora partilhou esta teoria sobre os rumos de uma história: '{teoria}'. Reage como uma fã empolgada, sem spoilers confirmados, em português de Portugal."
         try:
