@@ -69,6 +69,8 @@ async def ai_text_hibrido(prompt: str) -> str:
 
 async def ai_json_hibrido(prompt: str) -> Dict[str, Any]:
     """Tenta obter JSON usando o Gemini; se falhar, recorre ao DeepSeek."""
+    logger.info(f"📤 Enviando prompt para IA (tamanho: {len(prompt)} caracteres)")
+    
     # 1. Tentativa com Gemini
     if ai_client:
         try:
@@ -79,6 +81,7 @@ async def ai_json_hibrido(prompt: str) -> Dict[str, Any]:
             )
             txt = response.text if response.text else "{}"
             txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.IGNORECASE)
+            logger.info(f"✅ Gemini respondeu com {len(txt)} caracteres")
             return json.loads(txt)
         except Exception as e:
             logger.warning(f"Gemini JSON falhou: {e}")
@@ -99,10 +102,14 @@ async def ai_json_hibrido(prompt: str) -> Dict[str, Any]:
                         res_json = await resp.json()
                         txt = res_json["choices"][0]["message"]["content"]
                         txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.IGNORECASE)
+                        logger.info(f"✅ DeepSeek respondeu com {len(txt)} caracteres")
                         return json.loads(txt)
+                    else:
+                        logger.error(f"DeepSeek respondeu com status {resp.status}")
         except Exception as ds_err:
             logger.warning(f"DeepSeek JSON falhou: {ds_err}")
     
+    logger.error("❌ Todas as tentativas de IA falharam")
     return {}
 
 
