@@ -6,6 +6,7 @@ import config
 from storage import dados, guardar_dados
 from utils import enviar_mensagem_longa
 from ai import ai_text_com_retry, extrair_texto_da_imagem
+from datetime import datetime
 
 logger = logging.getLogger('CosmoBot')
 
