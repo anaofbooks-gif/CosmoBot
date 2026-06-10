@@ -2,12 +2,13 @@ import discord
 from discord.ext import commands
 import logging
 import asyncio
+import unicodedata
 from datetime import datetime
 from typing import Optional
 
 import config
-from storage import dados, guardar_dados
-from utils import livro_completo, parsear_livro, normalizar_categoria, canal_nome_seguro, adicionar_livro_a_tbr_mes, enviar_mensagem_longa, data_valida, este_ano, obter_canal_discord, garantir_canal
+from storage import dados, guardar_dados, adicionar_livro_a_tbr_mes
+from utils import livro_completo, parsear_livro, normalizar_categoria, canal_nome_seguro, enviar_mensagem_longa, data_valida, este_ano, obter_canal_discord, garantir_canal
 from ai import ai_json_com_retry, validar_resposta_ia_pydantic, validar_resposta_ia
 from models import RespostaMetas
 from images import desenhar_calendario_leituras, gerar_fundo_calendario, Image
