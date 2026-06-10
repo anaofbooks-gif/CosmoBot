@@ -58,4 +58,32 @@ async def on_message(message):
             for anexo in message.attachments:
                 if anexo.content_type and anexo.content_type.startswith("image/"):
                     from ai import extrair_texto_da_imagem
-                    texto_extraido = await extrair_texto_d
+                    texto_extraido = await extrair_texto_da_imagem(anexo.url)
+                    if texto_extraido:
+                        review.setdefault("conversas", []).append(f"📸 Print: {texto_extraido}")
+                        await message.add_reaction("👁️")
+                    else:
+                        review.setdefault("anexos", []).append(anexo.url)
+                        review.setdefault("desabafos", []).append(f"[Print de mensagem: {anexo.url}]")
+            guardar_dados()
+            await message.add_reaction("📝")
+    await bot.process_commands(message)
+
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"❌ Falta informação no comando. Usa `{config.COMMAND_PREFIX}guia` para ajuda.")
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send("❌ Um dos valores não está no formato certo. Usa `!guia` para ver exemplos.")
+    elif isinstance(error, (discord.Forbidden, discord.NotFound, discord.HTTPException)):
+        logger.warning(f"Erro Discord: {error}")
+        await ctx.send("❌ Ocorreu um erro de comunicação com o Discord. Tenta novamente.")
+    else:
+        logger.exception(f"Erro não tratado: {error}")
+        await ctx.send(f"❌ Erro inesperado: {error}")
+
+
+if __name__ == "__main__":
+    carregar_dados()
+    bot.run(config.DISCORD_TOKEN)
