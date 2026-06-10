@@ -4,12 +4,11 @@ import random
 import calendar
 import asyncio
 import logging
+from typing import Optional
 
-# Configurar logging básico para este módulo
+# Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('CosmoBot')
-
-from typing import Optional
 
 import config
 from storage import dados, guardar_dados, livros_tbr_flat, adicionar_livro_a_tbr_mes, sorteio_mes_ativo
