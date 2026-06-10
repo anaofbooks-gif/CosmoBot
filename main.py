@@ -87,10 +87,12 @@ async def on_command_error(ctx, error):
         await ctx.send(f"❌ Falta informação no comando. Usa `{config.COMMAND_PREFIX}guia` para ajuda.")
     elif isinstance(error, commands.BadArgument):
         await ctx.send("❌ Um dos valores não está no formato certo.")
+    elif isinstance(error, commands.CommandOnCooldown):
+        # Mensagem amigável para cooldown
+        await ctx.send(f"⏳ Calma! Este comando tem um limite de uso. Tenta novamente em {error.retry_after:.1f} segundos.")
     else:
         logger.error(f"Erro: {error}")
         await ctx.send(f"❌ Erro: {error}")
-
 
 if __name__ == "__main__":
     carregar_dados()
