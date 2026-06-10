@@ -98,6 +98,31 @@ async def enviar_mensagem_longa(canal, texto, limite=1900):
         await canal.send(texto[i:i+limite])
 
 
+async def obter_canal_discord(canal_id: int):
+    from main import bot
+    canal = bot.get_channel(canal_id)
+    if canal:
+        return canal
+    try:
+        return await bot.fetch_channel(canal_id)
+    except:
+        return None
+
+
+async def garantir_canal(guild: discord.Guild, nome: str) -> discord.TextChannel:
+    canal = discord.utils.get(guild.text_channels, name=nome)
+    if canal:
+        return canal
+    return await guild.create_text_channel(nome)
+
+
+def canal_nome_seguro(base: str) -> str:
+    texto = unicodedata.normalize("NFKD", base.lower().strip())
+    texto = "".join(ch for ch in texto if not unicodedata.combining(ch))
+    texto = re.sub(r"\s+", "-", texto)
+    return "".join(ch for ch in texto if ch.isalnum() or ch == "-")
+
+
 def livros_tbr_flat() -> List[str]:
     from storage import dados
     return [livro for lista in dados.get("tbr_por_mes", {}).values() for livro in lista]
@@ -154,3 +179,7 @@ def livros_bem_avaliados(minimo: float = 4.0) -> List[Dict]:
         if nota >= minimo:
             resultado.append(livro)
     return resultado
+
+
+def numero_mes(mes: str) -> int:
+    return config.MESES_ORDEM.index(normalizar_categoria(mes)) + 1
