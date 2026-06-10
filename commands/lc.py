@@ -3,24 +3,14 @@ from discord.ext import commands
 import asyncio
 import unicodedata
 from datetime import datetime
-import logging
 from typing import Optional
-
-# Configurar logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger('CosmoBot')
 
 import config
 from storage import dados, guardar_dados, adicionar_livro_a_tbr_mes
-from utils import (
-    livro_completo, parsear_livro, normalizar_categoria, canal_nome_seguro,
-    enviar_mensagem_longa, data_valida, este_ano, obter_canal_discord, garantir_canal
-)
+from utils import livro_completo, parsear_livro, normalizar_categoria, canal_nome_seguro, enviar_mensagem_longa, data_valida, este_ano, obter_canal_discord, garantir_canal
 from ai import ai_json_hibrido, validar_resposta_ia_pydantic, validar_resposta_ia
 from models import RespostaMetas
 from images import desenhar_calendario_leituras, gerar_fundo_calendario, Image
-
-logger = logging.getLogger('CosmoBot')
 
 
 class LCCog(commands.Cog):
@@ -96,7 +86,7 @@ Respond only with valid JSON in this structure:
                     "canal_id": topico.id,
                     "thread_id": topico.id,
                     "avisado": False,
-                    "tipo": "lc"
+                    "tipo": "lc",
                 })
                 criados += 1
 
@@ -106,13 +96,12 @@ Respond only with valid JSON in this structure:
                 try:
                     img = desenhar_calendario_leituras(mes_cap, int(este_ano()))
                     await topico.send("🗓️ **Calendário visual do mês:**", file=discord.File(img, filename=f"lc-{mes_cap.lower()}-{este_ano()}.png"))
-                except Exception as e:
-                    logger.warning(f"Erro ao gerar calendário LC: {e}")
+                except Exception:
+                    pass
 
             await ctx.send(f"✅ Metas guardadas com sucesso para {topico.mention}. Lembretes criados: **{criados}**.\nUsa `!calendariolc {mes_cap}` para gerar o calendário visual novamente.")
 
         except Exception as e:
-            logger.exception(f"Erro ao processar metas: {e}")
             await ctx.send(f"❌ Erro ao processar metas: {e}")
 
     @commands.command(name="editmeta")
@@ -184,7 +173,7 @@ JSON only:
                     "canal_id": canal_id,
                     "thread_id": canal_id,
                     "avisado": False,
-                    "tipo": "lc"
+                    "tipo": "lc",
                 })
                 criados += 1
 
@@ -194,13 +183,12 @@ JSON only:
                 try:
                     img = desenhar_calendario_leituras(mes_cap, int(este_ano()))
                     await ctx.send("🗓️ **Calendário visual atualizado:**", file=discord.File(img, filename=f"lc-edit-{mes_cap.lower()}.png"))
-                except Exception as e:
-                    logger.warning(f"Erro ao gerar calendário editado: {e}")
+                except Exception:
+                    pass
 
             await ctx.send(f"✅ Metas atualizadas para **{livro_txt}**. Novos lembretes: **{criados}**.")
 
         except Exception as e:
-            logger.exception(f"Erro ao editar metas: {e}")
             await ctx.send(f"❌ Erro ao editar metas: {e}")
 
     @commands.command(name="calendariolc")
@@ -232,7 +220,6 @@ JSON only:
             else:
                 await ctx.send(f"🗓️ **Calendário de leituras conjuntas - {mes_alvo} {ano}**", file=arquivo)
         except Exception as e:
-            logger.exception(f"Erro ao criar calendário: {e}")
             await ctx.send(f"❌ Erro ao criar calendário: {e}")
 
     @commands.command(name="removerlc")
