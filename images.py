@@ -208,7 +208,46 @@ def analisar_titulo_alfabeto(titulo: str):
             return {"status": "OK", "letra": ch.upper()}
     return {"status": "INVALIDO", "letra": None}
 async def gerar_fundo_calendario(mes: str, ano: int) -> Optional[io.BytesIO]:
-    """Versão simplificada - retorna None para usar fundo padrão"""
-    # Por enquanto, retorna None para usar o fundo padrão
-    # Mais tarde podes implementar com IA
-    return None
+    """Gera uma imagem de fundo temática para o calendário usando Gemini Imagen."""
+    prompts = {
+        "Janeiro": "fundo azul inverno com flocos de neve suaves, estilo aquarela, tons pastel",
+        "Fevereiro": "fundo romântico coração e flores, tons rosa e vermelho, estilo aquarela",
+        "Março": "fundo primavera com flores silvestres e folhas verdes, tons pastel, estilo aquarela",
+        "Abril": "fundo de Páscoa com ovos decorados e flores, tons lilás e amarelo, estilo aquarela",
+        "Maio": "fundo de campo de flores coloridas, céu azul claro, estilo aquarela",
+        "Junho": "fundo de praia, areia clara e mar azul, sol brilhante, estilo aquarela de verão",
+        "Julho": "fundo de férias de verão, palmeiras e sol, cores quentes, estilo tropical aquarela",
+        "Agosto": "fundo de pôr do sol na praia, tons laranja e rosa, estilo aquarela",
+        "Setembro": "fundo de folhas de outono caindo, tons laranja e dourado, estilo aquarela",
+        "Outubro": "fundo de Halloween com abóboras e folhas secas, tons laranja e roxo, estilo aquarela",
+        "Novembro": "fundo de outono profundo, tons castanho e vinho, estilo aquarela",
+        "Dezembro": "fundo de Natal com árvores e neve, tons vermelho e verde, estilo aquarela",
+    }
+    
+    from ai import ai_client
+    if not ai_client:
+        return None
+    
+    prompt = prompts.get(mes, f"fundo abstrato suave para calendário de {mes}, estilo aquarela, tons pastel")
+    
+    try:
+        response = ai_client.models.generate_content(
+            model="imagen-3.0-generate-001",
+            contents=prompt,
+            config={
+                "response_modalities": ["IMAGE"],
+                "image_config": {
+                    "aspect_ratio": "16:9",
+                    "output_format": "png"
+                }
+            }
+        )
+        
+        for part in response.parts:
+            if part.inline_data:
+                logger.info(f"🎨 Fundo IA gerado para {mes}")
+                return io.BytesIO(part.inline_data.data)
+        return None
+    except Exception as e:
+        logger.warning(f"Erro ao gerar fundo com IA: {e}")
+        return None
