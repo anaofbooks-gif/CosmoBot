@@ -1,3 +1,4 @@
+import logging
 import discord
 from discord.ext import commands
 import random
@@ -12,6 +13,7 @@ from ai import detetar_e_agendar_serie
 from images import desenhar_calendario_leituras, Image
 from views import ViewConfirmarDuplicado
 
+logger = logging.getLogger('CosmoBot')
 
 class TBRCog(commands.Cog):
     def __init__(self, bot):
