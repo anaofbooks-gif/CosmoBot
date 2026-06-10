@@ -1,20 +1,13 @@
 import discord
 from discord.ext import commands
-import logging
+from datetime import datetime
 from typing import Optional
-
-# Configurar logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger('CosmoBot')
 
 import config
 from storage import dados
 from utils import normalizar_categoria, este_ano
 from stats import estatisticas_mes, estatisticas_ano
 from images import desenhar_grafico_circular, desenhar_resumo_anual, Image
-from datetime import datetime
-
-logger = logging.getLogger('CosmoBot')
 
 
 class StatsCog(commands.Cog):
@@ -33,7 +26,8 @@ class StatsCog(commands.Cog):
         if stats["total_livros"] == 0:
             return await ctx.send(f"📭 Sem leituras registadas em **{mes_alvo} {ano}**.")
         img = desenhar_grafico_circular(f"Resumo de {mes_alvo} {ano}", ["Livros", "Páginas", "Autores", "Géneros"], [stats["total_livros"], stats["paginas"], stats["autores_unicos"], stats["generos_unicos"]])
-        await ctx.send(f"📊 **{mes_alvo} {ano}**\nLivros: **{stats['total_livros']}** | Páginas: **{stats['paginas']}**\nAutores distintos: **{stats['autores_unicos']}** | Géneros: **{stats['generos_unicos']}**", file=discord.File(img, filename=f"resumo-{mes_alvo.lower()}.png"))
+        detalhe = f"📊 **{mes_alvo} {ano}**\nLivros: **{stats['total_livros']}** | Páginas: **{stats['paginas']}**\nAutores distintos: **{stats['autores_unicos']}** | Géneros: **{stats['generos_unicos']}**"
+        await ctx.send(detalhe, file=discord.File(img, filename=f"resumo-{mes_alvo.lower()}.png"))
 
     @commands.command(name="resumoano")
     async def resumoano(self, ctx, ano: Optional[int] = None):
