@@ -2,11 +2,11 @@ import discord
 from discord.ext import commands
 import unicodedata
 import logging
+from typing import Optional
 
-# Configurar logging básico para este módulo
+# Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('CosmoBot')
-from typing import Optional
 
 import config
 from storage import dados, guardar_dados, marcar_livro_sorteio_lido
