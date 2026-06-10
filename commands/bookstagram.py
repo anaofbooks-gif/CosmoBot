@@ -51,6 +51,7 @@ class BookstagramCog(commands.Cog):
         await ctx.message.add_reaction("📥")
 
     @commands.command(name="gerar")
+    @commands.cooldown(1, 15, commands.BucketType.user)  # 1 vez a cada 15 segundos
     async def gerar(self, ctx):
         user_id = str(ctx.author.id)
         if user_id not in dados["review_em_andamento"]:
