@@ -1,3 +1,4 @@
+import logging
 import discord
 from discord.ext import commands
 import asyncio
@@ -8,6 +9,7 @@ from storage import dados
 from ai import ai_text_com_retry, obter_info_livro
 from utils import enviar_mensagem_longa
 
+logger = logging.getLogger('CosmoBot')
 
 class ExtrasCog(commands.Cog):
     def __init__(self, bot):
