@@ -1,3 +1,4 @@
+import logging
 import discord
 from discord.ext import commands
 
@@ -7,6 +8,7 @@ from utils import formatar_livro, livros_bem_avaliados, garantir_canal
 from ai import ai_json_hibrido
 from views import ViewSugestoes
 
+logger = logging.getLogger('CosmoBot')
 
 class RecommendationsCog(commands.Cog):
     def __init__(self, bot):
