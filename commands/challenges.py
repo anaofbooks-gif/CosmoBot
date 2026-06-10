@@ -1,12 +1,9 @@
 import discord
 from discord.ext import commands
-import logging
 
 import config
 from storage import dados, guardar_dados, livros_tbr_flat
 from utils import livro_completo, livro_ja_lido, enviar_mensagem_longa, este_ano
-
-logger = logging.getLogger('CosmoBot')
 
 
 class ChallengesCog(commands.Cog):
@@ -18,7 +15,8 @@ class ChallengesCog(commands.Cog):
         preenchidas = sum(1 for v in dados["desafio_alfabeto"].values() if v != config.VAZIO_ALFABETO)
         msg = f"🔤 **DESAFIO A A Z ({este_ano()})**\n📊 Progresso Geral: **{preenchidas}/26** letras completadas.\n\n"
         for letra, livro in dados["desafio_alfabeto"].items():
-            msg += f"{'🟢' if livro != config.VAZIO_ALFABETO else '⚫'} **{letra}**: {livro}\n"
+            icon = "🟢" if livro != config.VAZIO_ALFABETO else "⚫"
+            msg += f"{icon} **{letra}**: {livro}\n"
         await ctx.send(msg)
 
     @commands.command(name="addletra")
@@ -27,17 +25,18 @@ class ChallengesCog(commands.Cog):
         if len(letra) != 1 or letra not in dados["desafio_alfabeto"]:
             return await ctx.send("❌ Letra inválida. Usa apenas uma letra de A a Z.")
         try:
-            titulo = livro_completo(livro)
+            titulo_completo = livro_completo(livro)
         except ValueError:
-            titulo = livro.strip()
+            titulo_completo = livro.strip()
         if dados["desafio_alfabeto"][letra] != config.VAZIO_ALFABETO:
             return await ctx.send(f"⚠️ A letra **{letra}** já está preenchida com:\n📖 **{dados['desafio_alfabeto'][letra]}**\n\nUsa `!remalfabeto {letra}` primeiro se quiseres substituir.")
-        dados["desafio_alfabeto"][letra] = titulo
+        livro_existe = livro_ja_lido(titulo_completo, dados)
+        dados["desafio_alfabeto"][letra] = titulo_completo
         guardar_dados()
         preenchidas = sum(1 for v in dados["desafio_alfabeto"].values() if v != config.VAZIO_ALFABETO)
-        msg = f"🔤 **Letra {letra}** adicionada ao desafio A-Z com:\n📖 {titulo}\n"
-        if not livro_ja_lido(titulo, dados):
-            msg += f"\n⚠️ Este livro **não está no teu histórico de leituras**. Se foi lido, regista-o com `!lido \"{titulo}\"`."
+        msg = f"🔤 **Letra {letra}** adicionada ao desafio A-Z com:\n📖 {titulo_completo}\n"
+        if not livro_existe:
+            msg += f"\n⚠️ Este livro **não está no teu histórico de leituras**. Se foi lido, regista-o com `!lido \"{titulo_completo}\"`."
         else:
             msg += f"\n✅ Este livro já consta no teu histórico."
         msg += f"\n\n📊 Progresso atual: **{preenchidas}/26** letras."
@@ -48,7 +47,8 @@ class ChallengesCog(commands.Cog):
         letra = letra.strip().upper()
         if len(letra) != 1 or letra not in dados["desafio_alfabeto"]:
             return await ctx.send("❌ Letra inválida. Usa apenas uma letra de A a Z.")
-        if dados["desafio_alfabeto"][letra] == config.VAZIO_ALFABETO:
+        livro_atual = dados["desafio_alfabeto"][letra]
+        if livro_atual == config.VAZIO_ALFABETO:
             preenchidas = sum(1 for v in dados["desafio_alfabeto"].values() if v != config.VAZIO_ALFABETO)
             return await ctx.send(f"⚫ A letra **{letra}** já estava vazia.\nProgresso atual do A-Z: **{preenchidas}/26**. Usa `!alfabeto` para ver a lista completa.")
         dados["desafio_alfabeto"][letra] = config.VAZIO_ALFABETO
@@ -58,17 +58,18 @@ class ChallengesCog(commands.Cog):
 
     @commands.command(name="desafios")
     async def desafios(self, ctx):
-        total = len(dados["livros_lidos"])
-        letras = sum(1 for v in dados["desafio_alfabeto"].values() if v != config.VAZIO_ALFABETO)
-        tbr_total = len(livros_tbr_flat())
-        metas = sum(1 for l in dados["lembretes_metas"] if not l.get("avisado", False))
-        avaliados = sum(1 for l in dados["livros_lidos"] if l.get("estrelas") and l.get("estrelas") != "Sem avaliação")
+        total_lidos = len(dados["livros_lidos"])
+        letras_preenchidas = sum(1 for v in dados["desafio_alfabeto"].values() if v != config.VAZIO_ALFABETO)
+        letras_em_falta = [letra for letra, livro in dados["desafio_alfabeto"].items() if livro == config.VAZIO_ALFABETO]
+        total_tbr = len(livros_tbr_flat())
+        metas_ativas = sum(1 for lembrete in dados["lembretes_metas"] if not lembrete.get("avisado", False))
+        livros_avaliados = sum(1 for livro in dados["livros_lidos"] if livro.get("estrelas") and livro.get("estrelas") != "Sem avaliação")
         embed = discord.Embed(title=f"🏆 PROGRESSO DOS DESAFIOS ({este_ano()})", color=discord.Color.gold())
-        embed.add_field(name="📚 Meta anual", value=f"**{total}/{config.META_ANUAL}** livros lidos ({min(100, round(total / config.META_ANUAL * 100))}%)", inline=False)
-        embed.add_field(name="🔤 Desafio A-Z", value=f"**{letras}/26** letras completas ({round(letras / 26 * 100)}%).\nFaltam: {', '.join([l for l, v in dados['desafio_alfabeto'].items() if v == config.VAZIO_ALFABETO]) or 'nenhuma 🎉'}", inline=False)
-        embed.add_field(name="⭐ Avaliações", value=f"**{avaliados}/{total}** livros lidos avaliados.", inline=False)
-        embed.add_field(name="📅 Leituras conjuntas", value=f"**{metas}** metas futuras/pendentes guardadas.", inline=False)
-        embed.add_field(name="📌 TBR", value=f"**{tbr_total}** livros por ler no planeamento.", inline=False)
+        embed.add_field(name="📚 Meta anual", value=f"**{total_lidos}/{config.META_ANUAL}** livros lidos ({min(100, round(total_lidos / config.META_ANUAL * 100))}%)", inline=False)
+        embed.add_field(name="🔤 Desafio A-Z", value=f"**{letras_preenchidas}/26** letras completas ({round(letras_preenchidas / 26 * 100)}%).\nFaltam: {', '.join(letras_em_falta) if letras_em_falta else 'nenhuma 🎉'}", inline=False)
+        embed.add_field(name="⭐ Avaliações", value=f"**{livros_avaliados}/{total_lidos}** livros lidos avaliados.", inline=False)
+        embed.add_field(name="📅 Leituras conjuntas", value=f"**{metas_ativas}** metas futuras/pendentes guardadas.", inline=False)
+        embed.add_field(name="📌 TBR", value=f"**{total_tbr}** livros por ler no planeamento.", inline=False)
         embed.set_footer(text="Usa !alfabeto para ver o detalhe letra a letra.")
         await ctx.send(embed=embed)
 
@@ -76,39 +77,45 @@ class ChallengesCog(commands.Cog):
     async def historico(self, ctx):
         if not dados["livros_lidos"]:
             return await ctx.send("📭 O teu histórico de leituras ainda está vazio.")
-        por_ano = {}
+        historico_por_ano = {}
         for livro in dados["livros_lidos"]:
-            data = livro.get("data_leitura", "Data desconhecida")
-            ano = data.split("/")[-1] if "/" in data else "Desconhecido"
-            por_ano.setdefault(ano, []).append(livro)
-        for ano, livros in sorted(por_ano.items(), reverse=True):
+            data_str = livro.get("data_leitura", "Data desconhecida")
+            ano = data_str.split("/")[-1] if "/" in data_str else "Desconhecido"
+            if ano not in historico_por_ano:
+                historico_por_ano[ano] = []
+            historico_por_ano[ano].append(livro)
+        for ano, livros in sorted(historico_por_ano.items(), reverse=True):
             embed = discord.Embed(title=f"📜 HISTÓRICO DE LEITURAS - {ano}", color=discord.Color.gold())
             linhas = []
             for i, l in enumerate(livros, 1):
+                genero = l.get("genero", "")
+                paginas = l.get("paginas", 0)
                 extra = ""
-                if l.get("genero") and l.get("genero") != "N/D":
-                    extra += f" | {l.get('genero')}"
-                if l.get("paginas"):
-                    extra += f" | {l.get('paginas')} págs."
+                if genero and genero != "N/D":
+                    extra += f" | {genero}"
+                if paginas:
+                    extra += f" | {paginas} págs."
                 linhas.append(f"{i}. {l.get('titulo', 'Sem título')} — {l.get('estrelas', 'Sem avaliação')}{extra}")
             if len("\n".join(linhas)) > 4000:
                 partes = []
-                atual = []
-                tam = 0
+                parte_atual = []
+                tamanho_atual = 0
                 for linha in linhas:
-                    if tam + len(linha) + 1 > 3800:
-                        partes.append("\n".join(atual))
-                        atual = [linha]
-                        tam = len(linha)
+                    if tamanho_atual + len(linha) + 1 > 3800:
+                        partes.append("\n".join(parte_atual))
+                        parte_atual = [linha]
+                        tamanho_atual = len(linha)
                     else:
-                        atual.append(linha)
-                        tam += len(linha) + 1
-                if atual:
-                    partes.append("\n".join(atual))
-                embed.description = partes[0]
-                await ctx.send(embed=embed)
-                for parte in partes[1:]:
-                    await ctx.send(parte)
+                        parte_atual.append(linha)
+                        tamanho_atual += len(linha) + 1
+                if parte_atual:
+                    partes.append("\n".join(parte_atual))
+                for idx, parte in enumerate(partes):
+                    if idx == 0:
+                        embed.description = parte
+                        await ctx.send(embed=embed)
+                    else:
+                        await ctx.send(parte)
             else:
                 embed.description = "\n".join(linhas)
                 await ctx.send(embed=embed)
