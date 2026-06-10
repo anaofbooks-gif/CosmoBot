@@ -1,15 +1,12 @@
 import discord
 from discord.ext import commands
 import asyncio
-import logging
 from datetime import datetime
 
 import config
 from storage import dados
-from ai import ai_text_hibrido, obter_info_livro
+from ai import ai_text_com_retry, obter_info_livro
 from utils import enviar_mensagem_longa
-
-logger = logging.getLogger('CosmoBot')
 
 
 class ExtrasCog(commands.Cog):
@@ -17,15 +14,13 @@ class ExtrasCog(commands.Cog):
         self.bot = bot
 
     @commands.command(name="entrevista")
-    @commands.cooldown(1, 20, commands.BucketType.user)
     async def entrevista(self, ctx, personagem: str, *, pergunta: str):
         await ctx.send(f"🔮 A invocar o espírito de {personagem}...")
         prompt = f"Assume integralmente a personalidade da personagem fictícia '{personagem}'. Responde estritamente na primeira pessoa, em português de Portugal. Pergunta: '{pergunta}'"
         try:
-            res = await ai_text_hibrido(prompt)
+            res = await ai_text_com_retry(prompt)
             await enviar_mensagem_longa(ctx, f"**[{personagem}]:** {res}")
         except Exception as e:
-            logger.exception(f"Erro na entrevista: {e}")
             await ctx.send(f"❌ Erro na entrevista: {e}")
 
     @commands.command(name="ressaca")
@@ -35,18 +30,15 @@ class ExtrasCog(commands.Cog):
             res = await ai_text_com_retry(prompt)
             await enviar_mensagem_longa(ctx, f"🩺 **DIAGNÓSTICO PARA RESSACA LITERÁRIA**\n\n{res}")
         except Exception as e:
-            logger.exception(f"Erro ao gerar sugestões: {e}")
             await ctx.send(f"❌ Erro ao gerar sugestões: {e}")
 
     @commands.command(name="teoria")
-    @commands.cooldown(1, 15, commands.BucketType.user)
     async def teoria(self, ctx, *, teoria: str):
         prompt = f"Uma leitora partilhou esta teoria sobre os rumos de uma história: '{teoria}'. Reage como uma fã empolgada, sem spoilers confirmados, em português de Portugal."
         try:
             res = await ai_text_com_retry(prompt)
             await enviar_mensagem_longa(ctx, f"💭 **AVALIAÇÃO DA TUA TEORIA:**\n\n{res}")
         except Exception as e:
-            logger.exception(f"Erro ao avaliar teoria: {e}")
             await ctx.send(f"❌ Erro ao avaliar teoria: {e}")
 
     @commands.command(name="sprint")
