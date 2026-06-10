@@ -4,7 +4,7 @@ import discord
 from discord.ext import commands
 
 import config
-from storage import *
+from storage import carregar_dados, guardar_dados, dados, resumo_persistencia
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('CosmoBot')
@@ -14,12 +14,25 @@ intents.message_content = True
 bot = commands.Bot(command_prefix=config.COMMAND_PREFIX, intents=intents)
 
 
+# Lista de todos os cogs
+COGS = [
+    "commands.tbr",
+    "commands.reading",
+    "commands.challenges",
+    "commands.lc",
+    "commands.recommendations",
+    "commands.bookstagram",
+    "commands.stats_cog",
+    "commands.extras",
+    "commands.admin",
+]
+
+
 async def carregar_cogs():
-    """Carrega todos os cogs"""
-    cogs = ["tbr", "reading", "challenges", "lc", "recommendations", "bookstagram", "stats_cog", "extras", "admin"]
-    for cog in cogs:
+    """Carrega todos os cogs dinamicamente"""
+    for cog in COGS:
         try:
-            await bot.load_extension(f"commands.{cog}")
+            await bot.load_extension(cog)
             logger.info(f"✅ Cog {cog} carregado")
         except Exception as e:
             logger.error(f"❌ Falha ao carregar {cog}: {e}")
@@ -75,8 +88,8 @@ async def on_command_error(ctx, error):
     elif isinstance(error, commands.BadArgument):
         await ctx.send("❌ Um dos valores não está no formato certo.")
     else:
-        logger.error(f"Erro não tratado: {error}")
-        await ctx.send(f"❌ Erro inesperado: {error}")
+        logger.error(f"Erro: {error}")
+        await ctx.send(f"❌ Erro: {error}")
 
 
 if __name__ == "__main__":
