@@ -1,10 +1,12 @@
 import discord
 from discord.ext import commands
-from collections import Counter
+import logging
 
 import config
-from storage import dados, guardar_dados
-from utils import livro_completo, livro_ja_lido, enviar_mensagem_longa, este_ano, livros_tbr_flat
+from storage import dados, guardar_dados, livros_tbr_flat
+from utils import livro_completo, livro_ja_lido, enviar_mensagem_longa, este_ano
+
+logger = logging.getLogger('CosmoBot')
 
 
 class ChallengesCog(commands.Cog):
