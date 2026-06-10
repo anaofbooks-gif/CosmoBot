@@ -8,6 +8,7 @@ load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")  # <-- ADICIONAR ESTA LINHA
 COMMAND_PREFIX = os.getenv("PREFIX", "!")
 
 # Diretórios
