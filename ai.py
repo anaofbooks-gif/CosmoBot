@@ -76,61 +76,49 @@ async def ai_text_hibrido(prompt: str) -> str:
 
 
 async def ai_json_hibrido(prompt: str) -> Dict[str, Any]:
-    """Tenta obter JSON usando o Gemini; se falhar, recorre ao DeepSeek."""
-    logger.info(f"📤 Prompt para IA (tamanho: {len(prompt)})")
+    """Usa OpenRouter para gerar JSON"""
     
-    # 1. Tentativa com Gemini
-    if ai_client:
-        try:
-            if hasattr(ai_client, 'generate_content'):
-                response = ai_client.generate_content(
-                    model=config.GEMINI_MODEL,
-                    contents=prompt,
-                    generation_config={"response_mime_type": "application/json"}
-                )
-                if response and response.text:
-                    txt = response.text
-                    txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.IGNORECASE)
-                    logger.info(f"✅ Gemini respondeu: {txt[:200]}")
-                    return json.loads(txt)
-            elif hasattr(ai_client, 'models'):
-                response = ai_client.models.generate_content(
-                    model=config.GEMINI_MODEL,
-                    contents=prompt,
-                    config={"response_mime_type": "application/json"}
-                )
-                if response and response.text:
-                    txt = response.text
-                    txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.IGNORECASE)
-                    logger.info(f"✅ Gemini respondeu: {txt[:200]}")
-                    return json.loads(txt)
-        except Exception as e:
-            logger.warning(f"Gemini JSON falhou: {e}")
-
-    # 2. Fallback para DeepSeek
-    if config.DEEPSEEK_API_KEY:
-        headers = {"Authorization": f"Bearer {config.DEEPSEEK_API_KEY}", "Content-Type": "application/json"}
+    modelos_gratuitos = [
+        "google/gemini-2.0-flash-exp:free",
+        "microsoft/phi-3-mini-128k-instruct:free",
+        "meta-llama/llama-3.2-3b-instruct:free",
+        "deepseek/deepseek-chat:free"
+    ]
+    
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    for modelo in modelos_gratuitos:
         payload = {
-            "model": "deepseek-chat",
-            "messages": [{"role": "user", "content": f"{prompt}\n\nResponde APENAS com JSON válido, sem texto adicional."}],
+            "model": modelo,
+            "messages": [{"role": "user", "content": f"{prompt}\n\nRESPONDE APENAS COM JSON VÁLIDO. NADA MAIS."}],
             "temperature": 0.2,
-            "response_format": {"type": "json_object"}
+            "max_tokens": 500
         }
+        
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post("https://api.deepseek.com/v1/chat/completions", headers=headers, json=payload, timeout=15) as resp:
+                async with session.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=30) as resp:
                     if resp.status == 200:
                         res_json = await resp.json()
                         txt = res_json["choices"][0]["message"]["content"]
                         txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.IGNORECASE)
-                        logger.info(f"✅ DeepSeek respondeu: {txt[:200]}")
+                        logger.info(f"✅ {modelo} respondeu: {txt[:200]}...")
                         return json.loads(txt)
+                    elif resp.status == 429:
+                        logger.warning(f"⚠️ {modelo} - Rate Limit atingido! A aguardar...")
+                        await asyncio.sleep(5)  # Esperar 5 segundos antes de tentar outro modelo
+                        continue
                     else:
-                        logger.error(f"DeepSeek status {resp.status}")
-        except Exception as ds_err:
-            logger.warning(f"DeepSeek JSON falhou: {ds_err}")
+                        logger.warning(f"{modelo} falhou com status {resp.status}")
+        except asyncio.TimeoutError:
+            logger.warning(f"{modelo} timeout")
+        except Exception as e:
+            logger.warning(f"{modelo} erro: {e}")
     
-    logger.error("❌ Todas as tentativas de IA falharam")
+    logger.error("❌ Todos os modelos falharam")
     return {}
 
 
