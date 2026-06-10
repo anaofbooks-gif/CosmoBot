@@ -1,19 +1,11 @@
 import discord
 from discord.ext import commands
-import logging
-from typing import Optional
-
-# Configurar logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger('CosmoBot')
 
 import config
 from storage import dados, guardar_dados, livros_tbr_flat
 from utils import formatar_livro, livros_bem_avaliados, garantir_canal
 from ai import ai_json_hibrido
 from views import ViewSugestoes
-
-logger = logging.getLogger('CosmoBot')
 
 
 class RecommendationsCog(commands.Cog):
@@ -63,9 +55,7 @@ RESPONDE APENAS COM JSON:
 ]}}"""
 
         try:
-            logger.info("📤 Enviando prompt para IA...")
             resposta = await ai_json_hibrido(prompt)
-            logger.info(f"📥 Resposta da IA: {resposta}")
 
             livros_sugeridos = []
             if isinstance(resposta, dict):
@@ -75,7 +65,6 @@ RESPONDE APENAS COM JSON:
                     livros_sugeridos = resposta["recomendacoes"]
 
             if not livros_sugeridos:
-                logger.warning(f"Nenhum livro encontrado na resposta: {resposta}")
                 return await ctx.send("❌ Não consegui gerar sugestões válidas. Tenta novamente daqui a pouco.")
 
             await canal.send("✨ **A TUA REVISTA LITERÁRIA PERSONALIZADA** ✨\n*Sugestões baseadas nos teus livros com 4⭐ ou mais:*\n" + "\n".join(f"• {l['titulo']} ({l.get('nota', 0):.1f}⭐)" for l in favoritos[:5]))
@@ -116,16 +105,12 @@ RESPONDE APENAS COM JSON:
             await ctx.send(f"✅ Painel visual gerado com sucesso em {canal.mention}!")
 
         except Exception as e:
-            logger.exception(f"Erro ao processar recomendações: {e}")
             await ctx.send(f"❌ Erro ao processar recomendações: {e}")
 
     @commands.command(name="testeia")
     async def teste_ia(self, ctx):
-        """Comando de teste para verificar se a IA está a responder"""
         await ctx.send("🔍 A testar ligação à IA...")
-
         prompt = 'Responde APENAS com JSON: {"teste": "funcionou"}'
-
         try:
             resposta = await ai_json_hibrido(prompt)
             await ctx.send(f"✅ IA respondeu: {resposta}")
