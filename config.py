@@ -47,7 +47,3 @@ ARTIGOS_BANIDOS = {
     "o", "a", "os", "as", "um", "uma", "uns", "umas",
     "the", "a", "an"
 }
-
-_DATA_DIR = Path(os.getenv("BOT_DATA_DIR", _SCRIPT_DIR / "data")).expanduser().resolve()
-_DATA_DIR.mkdir(parents=True, exist_ok=True)  # <-- ISTO CRIA A PASTA SE NÃO EXISTIR
-DATA_FILE = _DATA_DIR / "dados_bot.json"
