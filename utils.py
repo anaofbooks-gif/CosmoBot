@@ -6,49 +6,69 @@ from typing import List, Optional, Tuple, Dict, Any
 import discord
 import config
 
+# ========== FUNÇÕES DE LIVROS ==========
 
 def formatar_livro(titulo: str, autor: str) -> str:
+    titulo = titulo.strip()
+    autor = autor.strip()
     if config.SEPARADOR_LIVRO in titulo:
         return titulo
+    if not autor:
+        raise ValueError("autor_obrigatorio")
     return f"{titulo}{config.SEPARADOR_LIVRO}{autor}"
 
-
 def parsear_livro(texto: str) -> Tuple[str, str]:
+    texto = texto.strip()
     if config.SEPARADOR_LIVRO not in texto:
         raise ValueError("autor_obrigatorio")
     titulo, autor = texto.rsplit(config.SEPARADOR_LIVRO, 1)
-    return titulo.strip(), autor.strip()
-
+    titulo, autor = titulo.strip(), autor.strip()
+    if not titulo or not autor:
+        raise ValueError("autor_obrigatorio")
+    return titulo, autor
 
 def livro_completo(texto: str) -> str:
     if config.SEPARADOR_LIVRO in texto:
         return texto.strip()
     raise ValueError("autor_obrigatorio")
 
-
-def hoje_str() -> str:
-    return datetime.now().strftime("%d/%m/%Y")
-
-
-def este_ano() -> str:
-    return datetime.now().strftime("%Y")
-
-
-def data_valida(data_texto: str) -> bool:
-    try:
-        datetime.strptime(data_texto, "%d/%m/%Y")
-        return True
-    except (TypeError, ValueError):
-        return False
-
-
-def normalizar_categoria(categoria: str) -> str:
-    return categoria.strip().capitalize()
-
-
 def normalizar_titulo(titulo: str) -> str:
     return re.sub(r'^[~!@#$%^&*()_+{}\[\]:;<>?/\\|]+\s*', '', titulo)
 
+def safe_custom_id(base: str, max_len: int = 100) -> str:
+    if len(base) <= max_len:
+        return base
+    hash_sufixo = hashlib.md5(base.encode()).hexdigest()[:8]
+    return f"{base[:max_len-9]}_{hash_sufixo}"
+
+def livro_ja_lido(titulo_completo: str, dados: Dict) -> bool:
+    alvo = titulo_completo.lower().strip()
+    return any(l.get("titulo", "").lower().strip() == alvo for l in dados.get("livros_lidos", []))
+
+def buscar_livro_case_insensitive(lista: List[str], alvo: str) -> Optional[str]:
+    alvo_lower = alvo.lower().strip()
+    for item in lista:
+        if item.lower().strip() == alvo_lower:
+            return item
+    return None
+
+def livros_bem_avaliados(dados: Dict, minimo: float = 4.0) -> List[Dict]:
+    resultado = []
+    for livro in dados.get("livros_lidos", []):
+        titulo = str(livro.get("titulo", "")).strip()
+        if not titulo:
+            continue
+        nota = livro.get("nota")
+        if isinstance(nota, (int, float)) and nota > 0:
+            nota_valor = float(nota)
+        else:
+            estrelas = livro.get("estrelas", "")
+            nota_valor = estrelas_para_nota(estrelas)
+        if nota_valor >= minimo:
+            resultado.append({**livro, "nota": nota_valor})
+    return resultado
+
+# ========== FUNÇÕES DE AVALIAÇÃO ==========
 
 def estrelas_para_texto(nota: float) -> str:
     if nota <= 0:
@@ -64,8 +84,7 @@ def estrelas_para_texto(nota: float) -> str:
         texto += "¾"
     elif resto > 0:
         texto += f" ({nota})"
-    return texto
-
+    return texto or f"{nota}⭐"
 
 def estrelas_para_nota(estrelas: str) -> float:
     if not estrelas or estrelas == "Sem avaliação":
@@ -77,44 +96,36 @@ def estrelas_para_nota(estrelas: str) -> float:
         nota += 0.5
     elif "¾" in estrelas:
         nota += 0.75
-    return nota
-
+    match = re.search(r'\((\d+\.?\d*)\)', estrelas)
+    if match:
+        nota = float(match.group(1))
+    return float(nota)
 
 def nota_valida(nota: float) -> bool:
     if nota < 0.25 or nota > 5:
         return False
     return round(nota * 4) % 4 == 0
 
+# ========== FUNÇÕES DE DATA ==========
 
-def safe_custom_id(base: str, max_len: int = 100) -> str:
-    if len(base) <= max_len:
-        return base
-    hash_sufixo = hashlib.md5(base.encode()).hexdigest()[:8]
-    return f"{base[:max_len-9]}_{hash_sufixo}"
+def hoje_str() -> str:
+    return datetime.now().strftime("%d/%m/%Y")
 
+def este_ano() -> str:
+    return datetime.now().strftime("%Y")
 
-async def enviar_mensagem_longa(canal, texto, limite=1900):
-    for i in range(0, len(texto), limite):
-        await canal.send(texto[i:i+limite])
-
-
-async def obter_canal_discord(canal_id: int):
-    from main import bot
-    canal = bot.get_channel(canal_id)
-    if canal:
-        return canal
+def data_valida(data_texto: str) -> bool:
     try:
-        return await bot.fetch_channel(canal_id)
-    except:
-        return None
+        datetime.strptime(data_texto, "%d/%m/%Y")
+        return True
+    except (TypeError, ValueError):
+        return False
 
+def normalizar_categoria(categoria: str) -> str:
+    return categoria.strip().capitalize()
 
-async def garantir_canal(guild: discord.Guild, nome: str) -> discord.TextChannel:
-    canal = discord.utils.get(guild.text_channels, name=nome)
-    if canal:
-        return canal
-    return await guild.create_text_channel(nome)
-
+def numero_mes(mes: str) -> int:
+    return config.MESES_ORDEM.index(normalizar_categoria(mes)) + 1
 
 def canal_nome_seguro(base: str) -> str:
     texto = unicodedata.normalize("NFKD", base.lower().strip())
@@ -122,64 +133,34 @@ def canal_nome_seguro(base: str) -> str:
     texto = re.sub(r"\s+", "-", texto)
     return "".join(ch for ch in texto if ch.isalnum() or ch == "-")
 
+# ========== FUNÇÕES DE DISCORD ==========
 
-def livros_tbr_flat() -> List[str]:
-    from storage import dados
-    return [livro for lista in dados.get("tbr_por_mes", {}).values() for livro in lista]
+async def obter_canal_discord(canal_id: int) -> Optional[discord.abc.Messageable]:
+    from main import bot
+    canal = bot.get_channel(canal_id)
+    if canal:
+        return canal
+    try:
+        return await bot.fetch_channel(canal_id)
+    except (discord.NotFound, discord.HTTPException):
+        return None
 
+async def enviar_mensagem_longa(canal: discord.abc.Messageable, texto: str, limite: int = 1900) -> None:
+    partes = []
+    bloco_atual = ""
+    for linha in texto.splitlines():
+        if len(bloco_atual) + len(linha) + 1 > limite:
+            partes.append(bloco_atual)
+            bloco_atual = linha
+        else:
+            bloco_atual = f"{bloco_atual}\n{linha}" if bloco_atual else linha
+    if bloco_atual:
+        partes.append(bloco_atual)
+    for parte in partes:
+        await canal.send(parte)
 
-def buscar_livro_case_insensitive(lista: List[str], alvo: str) -> Optional[str]:
-    alvo_lower = alvo.lower().strip()
-    for item in lista:
-        if item.lower().strip() == alvo_lower:
-            return item
-    return None
-
-
-def livro_ja_lido(titulo_completo: str, dados: Dict) -> bool:
-    alvo = titulo_completo.lower().strip()
-    return any(l.get("titulo", "").lower().strip() == alvo for l in dados.get("livros_lidos", []))
-
-
-def adicionar_livro_a_tbr_mes(livro: str, mes: str) -> str:
-    from storage import dados, guardar_dados
-    existente = buscar_livro_case_insensitive(dados["tbr_por_mes"][mes], livro)
-    if existente:
-        return f"📌 **{existente}** já estava na TBR de **{mes}**."
-    dados["tbr_por_mes"][mes].append(livro)
-    guardar_dados()
-    return f"📚 **{livro}** foi adicionado à TBR de **{mes}**."
-
-
-def marcar_livro_sorteio_lido(titulo_completo: str) -> List[str]:
-    from storage import dados, guardar_dados
-    meses = []
-    alvo = titulo_completo.lower().strip()
-    for mes, info in dados.get("sorteios_mes", {}).items():
-        livros = [l.lower().strip() for l in info.get("livros", [])]
-        if alvo in livros:
-            lidos = info.setdefault("lidos", [])
-            if titulo_completo not in lidos:
-                for livro in info.get("livros", []):
-                    if livro.lower().strip() == alvo:
-                        lidos.append(livro)
-                        break
-            pendentes = [l for l in info.get("livros", []) if l.lower().strip() not in {x.lower().strip() for x in lidos}]
-            if not pendentes:
-                meses.append(mes)
-    guardar_dados()
-    return meses
-
-
-def livros_bem_avaliados(minimo: float = 4.0) -> List[Dict]:
-    from storage import dados
-    resultado = []
-    for livro in dados.get("livros_lidos", []):
-        nota = livro.get("nota", 0)
-        if nota >= minimo:
-            resultado.append(livro)
-    return resultado
-
-
-def numero_mes(mes: str) -> int:
-    return config.MESES_ORDEM.index(normalizar_categoria(mes)) + 1
+async def garantir_canal(guild: discord.Guild, nome: str) -> discord.TextChannel:
+    canal = discord.utils.get(guild.text_channels, name=nome)
+    if canal:
+        return canal
+    return await guild.create_text_channel(nome)
