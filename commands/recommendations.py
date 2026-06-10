@@ -15,7 +15,8 @@ class RecommendationsCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="recomendar")
+  @commands.command(name="recomendar")
+  @commands.cooldown(1, 30, commands.BucketType.user)  # 1 vez a cada 30 segundos por utilizador
     async def recomendar(self, ctx):
         guild = ctx.guild
         if not guild:
