@@ -5,8 +5,8 @@ import logging
 from typing import Optional
 
 import config
-from storage import dados, guardar_dados
-from utils import livro_completo, parsear_livro, hoje_str, este_ano, estrelas_para_texto, nota_valida, livro_ja_lido, marcar_livro_sorteio_lido
+from storage import dados, guardar_dados, marcar_livro_sorteio_lido
+from utils import livro_completo, parsear_livro, hoje_str, este_ano, estrelas_para_texto, nota_valida, livro_ja_lido
 from ai import obter_info_livro
 from images import analisar_titulo_alfabeto
 from views import ViewAvaliacao
