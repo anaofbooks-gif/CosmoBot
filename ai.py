@@ -15,30 +15,27 @@ GEMINI_DISPONIVEL = False
 GEMINI_USE_LEGACY = False
 
 try:
-    # Tentar o novo pacote google.genai (recomendado)
     from google import genai
     from google.genai import types
     GEMINI_USE_LEGACY = False
     GEMINI_DISPONIVEL = True
-    print("✅ Gemini configurado com sucesso (google.genai)")
+    logger.info("✅ Gemini configurado com sucesso (google.genai)")
 except ImportError:
     try:
-        # Fallback para o pacote antigo
         import google.generativeai as genai_legacy
         genai_legacy.configure(api_key=config.GEMINI_API_KEY)
         GEMINI_USE_LEGACY = True
         GEMINI_DISPONIVEL = True
-        print("✅ Gemini configurado com sucesso (modo legado - google.generativeai)")
-        print("⚠️ Considere atualizar: pip install google-genai")
+        logger.info("✅ Gemini configurado com sucesso (modo legado)")
     except ImportError:
-        print("⚠️ Biblioteca google-genai não instalada. Tente: pip install google-genai")
+        logger.warning("⚠️ Biblioteca google-genai não instalada. Tente: pip install google-genai")
     except Exception as e:
-        print(f"⚠️ Erro ao configurar Gemini: {e}")
+        logger.warning(f"⚠️ Erro ao configurar Gemini: {e}")
 
 # DeepSeek
 DEEPSEEK_DISPONIVEL = bool(config.DEEPSEEK_API_KEY)
 if DEEPSEEK_DISPONIVEL:
-    print("✅ DeepSeek API key configurada")
+    logger.info("✅ DeepSeek API key configurada")
 
 
 async def ai_json_hibrido(prompt: str) -> dict:
@@ -60,6 +57,10 @@ async def ai_json_hibrido(prompt: str) -> dict:
                         txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.IGNORECASE)
                         logger.info("✅ DeepSeek respondeu (JSON)")
                         return json.loads(txt)
+                    else:
+                        logger.warning(f"⚠️ DeepSeek erro HTTP {resp.status}")
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ DeepSeek timeout (30s)")
         except Exception as e:
             logger.warning(f"⚠️ DeepSeek falhou: {e}")
 
@@ -67,13 +68,11 @@ async def ai_json_hibrido(prompt: str) -> dict:
     if GEMINI_DISPONIVEL:
         try:
             if GEMINI_USE_LEGACY:
-                # Modo legado
                 import google.generativeai as genai_legacy
                 model = genai_legacy.GenerativeModel(config.GEMINI_MODEL)
                 response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
                 txt = response.text if response.text else "{}"
             else:
-                # Novo pacote google.genai
                 client = genai.Client(api_key=config.GEMINI_API_KEY)
                 response = client.models.generate_content(
                     model=config.GEMINI_MODEL,
@@ -107,20 +106,22 @@ async def ai_text_hibrido(prompt: str) -> str:
                         txt = res_json["choices"][0]["message"]["content"]
                         logger.info("✅ DeepSeek respondeu (texto)")
                         return txt
+                    else:
+                        logger.warning(f"⚠️ DeepSeek erro HTTP {resp.status}")
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ DeepSeek timeout (30s)")
         except Exception as e:
             logger.warning(f"⚠️ DeepSeek falhou: {e}")
 
-    # 2. Gemini (novo pacote ou legado)
+    # 2. Gemini
     if GEMINI_DISPONIVEL:
         try:
             if GEMINI_USE_LEGACY:
-                # Modo legado
                 import google.generativeai as genai_legacy
                 model = genai_legacy.GenerativeModel(config.GEMINI_MODEL)
                 response = model.generate_content(prompt)
                 return response.text if response.text else "❌ Sem resposta do Gemini."
             else:
-                # Novo pacote google.genai
                 client = genai.Client(api_key=config.GEMINI_API_KEY)
                 response = client.models.generate_content(
                     model=config.GEMINI_MODEL,
@@ -134,41 +135,55 @@ async def ai_text_hibrido(prompt: str) -> str:
     return "❌ Nenhuma IA disponível."
 
 
-async def ai_json_com_retry(prompt: str, tentativas: int = 2, espera: int = 3) -> dict:
+async def ai_json_com_retry(prompt: str, tentativas: int = 3, espera_base: int = 2) -> dict:
+    """
+    Exponential backoff: espera = 2s, 4s, 8s...
+    """
     for i in range(tentativas):
         try:
-            return await asyncio.wait_for(ai_json_hibrido(prompt), timeout=35)
+            return await asyncio.wait_for(ai_json_hibrido(prompt), timeout=45)
         except asyncio.TimeoutError:
-            logger.warning(f"Timeout na tentativa {i+1}/{tentativas}")
             if i < tentativas - 1:
-                await asyncio.sleep(espera)
+                tempo_pausa = espera_base * (2 ** i)
+                logger.warning(f"⏳ Timeout na tentativa {i+1}/{tentativas}. Re-tentativa em {tempo_pausa}s...")
+                await asyncio.sleep(tempo_pausa)
                 continue
+            logger.error(f"❌ JSON falhou após {tentativas} tentativas (timeout)")
             return {}
         except Exception as e:
-            logger.warning(f"Erro na tentativa {i+1}/{tentativas}: {e}")
             if i < tentativas - 1:
-                await asyncio.sleep(espera)
+                tempo_pausa = espera_base * (2 ** i)
+                logger.warning(f"⚠️ Erro na tentativa {i+1}/{tentativas}: {e}. Re-tentativa em {tempo_pausa}s...")
+                await asyncio.sleep(tempo_pausa)
                 continue
+            logger.error(f"❌ JSON falhou após {tentativas} tentativas: {e}")
             return {}
     return {}
 
 
-async def ai_text_com_retry(prompt: str, tentativas: int = 2, espera: int = 3) -> str:
+async def ai_text_com_retry(prompt: str, tentativas: int = 3, espera_base: int = 2) -> str:
+    """
+    Exponential backoff: espera = 2s, 4s, 8s...
+    """
     for i in range(tentativas):
         try:
-            return await asyncio.wait_for(ai_text_hibrido(prompt), timeout=35)
+            return await asyncio.wait_for(ai_text_hibrido(prompt), timeout=45)
         except asyncio.TimeoutError:
-            logger.warning(f"Timeout na tentativa {i+1}/{tentativas}")
             if i < tentativas - 1:
-                await asyncio.sleep(espera)
+                tempo_pausa = espera_base * (2 ** i)
+                logger.warning(f"⏳ Timeout na tentativa {i+1}/{tentativas}. Re-tentativa em {tempo_pausa}s...")
+                await asyncio.sleep(tempo_pausa)
                 continue
-            return "❌ A IA demorou demasiado."
+            logger.error(f"❌ Texto falhou após {tentativas} tentativas (timeout)")
+            return "❌ A IA demorou demasiado a responder. Tenta novamente."
         except Exception as e:
-            logger.warning(f"Erro na tentativa {i+1}/{tentativas}: {e}")
             if i < tentativas - 1:
-                await asyncio.sleep(espera)
+                tempo_pausa = espera_base * (2 ** i)
+                logger.warning(f"⚠️ Erro na tentativa {i+1}/{tentativas}: {e}. Re-tentativa em {tempo_pausa}s...")
+                await asyncio.sleep(tempo_pausa)
                 continue
-            return "❌ Erro na IA."
+            logger.error(f"❌ Texto falhou após {tentativas} tentativas: {e}")
+            return "❌ Erro na IA. Tenta novamente mais tarde."
     return "❌ Erro na IA."
 
 
@@ -190,8 +205,8 @@ def validar_resposta_ia(resposta: dict, campos: list) -> dict:
 
 
 async def extrair_texto_da_imagem(url_imagem: str) -> str:
-    """Extrai texto de imagem usando IA (placeholder - pode ser implementado com OCR)"""
-    # TODO: Implementar com Gemini Vision ou outra API de OCR
+    """Extrai texto de imagem usando IA (placeholder - pode ser implementado com Gemini Vision)"""
+    # TODO: Implementar com Gemini Vision
     return ""
 
 
@@ -205,7 +220,6 @@ async def obter_info_livro(query: str) -> dict:
                     if docs:
                         doc = docs[0]
                         autores = doc.get("author_name", [])
-                        # Extrair ano de publicação
                         ano = doc.get("first_publish_year", doc.get("publish_year", ["N/D"]))
                         if isinstance(ano, list):
                             ano = ano[0] if ano else "N/D"
