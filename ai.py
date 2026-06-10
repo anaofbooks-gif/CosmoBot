@@ -8,18 +8,32 @@ import config
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger('CosmoBot')
 
-# Gemini
+# Gemini - tentar novo pacote primeiro, depois o antigo como fallback
 GEMINI_DISPONIVEL = False
+GEMINI_USE_LEGACY = False
+
 try:
-    import google.generativeai as genai
-    genai.configure(api_key=config.GEMINI_API_KEY)
+    # Tentar o novo pacote google.genai (recomendado)
+    from google import genai
+    from google.genai import types
+    GEMINI_USE_LEGACY = False
     GEMINI_DISPONIVEL = True
-    print("✅ Gemini configurado com sucesso")
+    print("✅ Gemini configurado com sucesso (google.genai)")
 except ImportError:
-    print("⚠️ Biblioteca google.generativeai não instalada")
-except Exception as e:
-    print(f"⚠️ Erro ao configurar Gemini: {e}")
+    try:
+        # Fallback para o pacote antigo
+        import google.generativeai as genai_legacy
+        genai_legacy.configure(api_key=config.GEMINI_API_KEY)
+        GEMINI_USE_LEGACY = True
+        GEMINI_DISPONIVEL = True
+        print("✅ Gemini configurado com sucesso (modo legado - google.generativeai)")
+        print("⚠️ Considere atualizar: pip install google-genai")
+    except ImportError:
+        print("⚠️ Biblioteca google-genai não instalada. Tente: pip install google-genai")
+    except Exception as e:
+        print(f"⚠️ Erro ao configurar Gemini: {e}")
 
 # DeepSeek
 DEEPSEEK_DISPONIVEL = bool(config.DEEPSEEK_API_KEY)
@@ -44,22 +58,38 @@ async def ai_json_hibrido(prompt: str) -> dict:
                         res_json = await resp.json()
                         txt = res_json["choices"][0]["message"]["content"]
                         txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.IGNORECASE)
-                        print(f"✅ DeepSeek respondeu")
+                        logger.info("✅ DeepSeek respondeu (JSON)")
                         return json.loads(txt)
         except Exception as e:
-            print(f"⚠️ DeepSeek falhou: {e}")
+            logger.warning(f"⚠️ DeepSeek falhou: {e}")
 
-    # 2. Gemini
+    # 2. Gemini (novo pacote ou legado)
     if GEMINI_DISPONIVEL:
         try:
-            model = genai.GenerativeModel(config.GEMINI_MODEL)
-            response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
-            txt = response.text if response.text else "{}"
+            if GEMINI_USE_LEGACY:
+                # Modo legado
+                import google.generativeai as genai_legacy
+                model = genai_legacy.GenerativeModel(config.GEMINI_MODEL)
+                response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
+                txt = response.text if response.text else "{}"
+            else:
+                # Novo pacote google.genai
+                client = genai.Client(api_key=config.GEMINI_API_KEY)
+                response = client.models.generate_content(
+                    model=config.GEMINI_MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.2
+                    )
+                )
+                txt = response.text if response.text else "{}"
+            
             txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.IGNORECASE)
-            print(f"✅ Gemini respondeu")
+            logger.info("✅ Gemini respondeu (JSON)")
             return json.loads(txt)
         except Exception as e:
-            print(f"⚠️ Gemini falhou: {e}")
+            logger.warning(f"⚠️ Gemini falhou: {e}")
 
     return {}
 
@@ -74,18 +104,32 @@ async def ai_text_hibrido(prompt: str) -> str:
                 async with session.post("https://api.deepseek.com/v1/chat/completions", headers=headers, json=payload, timeout=30) as resp:
                     if resp.status == 200:
                         res_json = await resp.json()
-                        return res_json["choices"][0]["message"]["content"]
+                        txt = res_json["choices"][0]["message"]["content"]
+                        logger.info("✅ DeepSeek respondeu (texto)")
+                        return txt
         except Exception as e:
-            print(f"⚠️ DeepSeek falhou: {e}")
+            logger.warning(f"⚠️ DeepSeek falhou: {e}")
 
-    # 2. Gemini
+    # 2. Gemini (novo pacote ou legado)
     if GEMINI_DISPONIVEL:
         try:
-            model = genai.GenerativeModel(config.GEMINI_MODEL)
-            response = model.generate_content(prompt)
-            return response.text if response.text else "❌ Sem resposta do Gemini."
+            if GEMINI_USE_LEGACY:
+                # Modo legado
+                import google.generativeai as genai_legacy
+                model = genai_legacy.GenerativeModel(config.GEMINI_MODEL)
+                response = model.generate_content(prompt)
+                return response.text if response.text else "❌ Sem resposta do Gemini."
+            else:
+                # Novo pacote google.genai
+                client = genai.Client(api_key=config.GEMINI_API_KEY)
+                response = client.models.generate_content(
+                    model=config.GEMINI_MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(temperature=0.7)
+                )
+                return response.text if response.text else "❌ Sem resposta do Gemini."
         except Exception as e:
-            print(f"⚠️ Gemini falhou: {e}")
+            logger.warning(f"⚠️ Gemini falhou: {e}")
 
     return "❌ Nenhuma IA disponível."
 
@@ -95,11 +139,13 @@ async def ai_json_com_retry(prompt: str, tentativas: int = 2, espera: int = 3) -
         try:
             return await asyncio.wait_for(ai_json_hibrido(prompt), timeout=35)
         except asyncio.TimeoutError:
+            logger.warning(f"Timeout na tentativa {i+1}/{tentativas}")
             if i < tentativas - 1:
                 await asyncio.sleep(espera)
                 continue
             return {}
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Erro na tentativa {i+1}/{tentativas}: {e}")
             if i < tentativas - 1:
                 await asyncio.sleep(espera)
                 continue
@@ -112,11 +158,13 @@ async def ai_text_com_retry(prompt: str, tentativas: int = 2, espera: int = 3) -
         try:
             return await asyncio.wait_for(ai_text_hibrido(prompt), timeout=35)
         except asyncio.TimeoutError:
+            logger.warning(f"Timeout na tentativa {i+1}/{tentativas}")
             if i < tentativas - 1:
                 await asyncio.sleep(espera)
                 continue
             return "❌ A IA demorou demasiado."
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Erro na tentativa {i+1}/{tentativas}: {e}")
             if i < tentativas - 1:
                 await asyncio.sleep(espera)
                 continue
@@ -128,7 +176,7 @@ def validar_resposta_ia_pydantic(resposta: dict, schema_class):
     try:
         return schema_class(**resposta)
     except Exception as e:
-        print(f"Validação falhou: {e}")
+        logger.warning(f"Validação Pydantic falhou: {e}")
         return None
 
 
@@ -142,6 +190,8 @@ def validar_resposta_ia(resposta: dict, campos: list) -> dict:
 
 
 async def extrair_texto_da_imagem(url_imagem: str) -> str:
+    """Extrai texto de imagem usando IA (placeholder - pode ser implementado com OCR)"""
+    # TODO: Implementar com Gemini Vision ou outra API de OCR
     return ""
 
 
@@ -155,17 +205,22 @@ async def obter_info_livro(query: str) -> dict:
                     if docs:
                         doc = docs[0]
                         autores = doc.get("author_name", [])
+                        # Extrair ano de publicação
+                        ano = doc.get("first_publish_year", doc.get("publish_year", ["N/D"]))
+                        if isinstance(ano, list):
+                            ano = ano[0] if ano else "N/D"
                         return {
                             "titulo": doc.get("title", query),
                             "autor": autores[0] if autores else "Desconhecido",
                             "genero": ", ".join(doc.get("subject", [])[:3]) or "N/D",
                             "paginas": doc.get("number_of_pages_median", 0),
+                            "ano": str(ano),
                             "capa": f"https://covers.openlibrary.org/b/id/{doc.get('cover_i')}-L.jpg" if doc.get("cover_i") else "",
                             "fonte": "Open Library",
                         }
     except Exception as e:
-        print(f"Erro ao pesquisar livro: {e}")
-    return {"titulo": query, "autor": "Desconhecido", "genero": "N/D", "paginas": 0, "capa": "", "fonte": "IA"}
+        logger.error(f"Erro ao pesquisar livro: {e}")
+    return {"titulo": query, "autor": "Desconhecido", "genero": "N/D", "paginas": 0, "ano": "N/D", "capa": "", "fonte": "IA"}
 
 
 async def detetar_e_agendar_serie(titulo_livro: str, mes_origem: str, canal) -> list:
