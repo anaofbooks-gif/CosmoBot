@@ -8,6 +8,7 @@ from storage import dados
 from utils import normalizar_categoria, este_ano
 from stats import estatisticas_mes, estatisticas_ano
 from images import desenhar_grafico_circular, desenhar_resumo_anual, Image
+from datetime import datetime
 
 logger = logging.getLogger('CosmoBot')
 
