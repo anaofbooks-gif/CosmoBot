@@ -1,3 +1,4 @@
+import logging
 import discord
 from discord.ext import commands
 import re
@@ -7,6 +8,7 @@ import config
 from storage import dados, guardar_dados, resumo_persistencia
 from utils import livro_completo, parsear_livro, formatar_livro, enviar_mensagem_longa, normalizar_titulo
 
+logger = logging.getLogger('CosmoBot')
 
 class AdminCog(commands.Cog):
     def __init__(self, bot):
