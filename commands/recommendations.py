@@ -5,7 +5,7 @@ import logging
 import config
 from storage import dados, guardar_dados, livros_tbr_flat
 from utils import formatar_livro, livros_bem_avaliados, garantir_canal
-from ai import ai_json_com_retry
+from ai import ai_json_hibrido
 from views import ViewSugestoes
 
 logger = logging.getLogger('CosmoBot')
@@ -61,7 +61,7 @@ RESPONDE APENAS COM JSON:
 
         try:
             logger.info("📤 Enviando prompt para IA...")
-            resposta = await ai_json_com_retry(prompt)
+            resposta = await ai_json_hibrido(prompt)
             logger.info(f"📥 Resposta da IA: {resposta}")
 
             livros_sugeridos = []
@@ -125,7 +125,7 @@ RESPONDE APENAS COM JSON:
         
         try:
             from ai import ai_json_com_retry
-            resposta = await ai_json_com_retry(prompt)
+            resposta = await ai_json_hibrido(prompt)
             await ctx.send(f"✅ IA respondeu: {resposta}")
         except Exception as e:
             await ctx.send(f"❌ Erro na IA: {e}")
