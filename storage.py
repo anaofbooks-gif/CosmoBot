@@ -141,7 +141,17 @@ def _pedido_http(metodo: str, url: str, corpo: Optional[Dict] = None, cabecalhos
 
 def carregar_dados() -> Dict:
     global dados
-    # ... (manter implementação original)
+    if config.DATA_FILE.exists():
+        try:
+            with open(config.DATA_FILE, "r", encoding="utf-8") as f:
+                dados = json.load(f)
+            print(f"📂 Dados carregados")
+        except Exception as e:
+            print(f"⚠️ Erro ao carregar: {e}")
+            dados = estado_inicial()
+    else:
+        dados = estado_inicial()
+        guardar_dados()  # Criar ficheiro inicial
     return dados
 
 
