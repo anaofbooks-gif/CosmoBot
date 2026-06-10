@@ -207,3 +207,8 @@ def analisar_titulo_alfabeto(titulo: str):
         if ch.isalpha():
             return {"status": "OK", "letra": ch.upper()}
     return {"status": "INVALIDO", "letra": None}
+async def gerar_fundo_calendario(mes: str, ano: int) -> Optional[io.BytesIO]:
+    """Versão simplificada - retorna None para usar fundo padrão"""
+    # Por enquanto, retorna None para usar o fundo padrão
+    # Mais tarde podes implementar com IA
+    return None
