@@ -9,7 +9,7 @@ from typing import Optional
 import config
 from storage import dados, guardar_dados, adicionar_livro_a_tbr_mes
 from utils import livro_completo, parsear_livro, normalizar_categoria, canal_nome_seguro, enviar_mensagem_longa, data_valida, este_ano, obter_canal_discord, garantir_canal
-from ai import ai_json_com_retry, validar_resposta_ia_pydantic, validar_resposta_ia
+from ai import ai_json_hibrido, validar_resposta_ia_pydantic, validar_resposta_ia
 from models import RespostaMetas
 from images import desenhar_calendario_leituras, gerar_fundo_calendario, Image
 
@@ -57,7 +57,7 @@ Respond only with valid JSON in this structure:
 }}
 """
         try:
-            resposta = await ai_json_com_retry(prompt)
+            resposta = await ai_json_hibrido(prompt)
             validada = validar_resposta_ia_pydantic(resposta, RespostaMetas) or validar_resposta_ia(resposta, ["metas"])
             metas = validada.get("metas", []) if isinstance(validada, dict) else [m.dict() for m in validada.metas]
             nota = validada.get("nota", "") if isinstance(validada, dict) else getattr(validada, "nota", "")
