@@ -15,8 +15,7 @@ class RecommendationsCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-  @commands.command(name="recomendar")
-  @commands.cooldown(1, 30, commands.BucketType.user)  # 1 vez a cada 30 segundos por utilizador
+    @commands.command(name="recomendar")
     async def recomendar(self, ctx):
         guild = ctx.guild
         if not guild:
@@ -32,14 +31,12 @@ class RecommendationsCog(commands.Cog):
         tbr_atual = livros_tbr_flat()
         vistos = dados.get("sugestoes_vistas", [])
 
-        # Criar texto dos favoritos
         favs_texto = []
         for l in favoritos[:10]:
             genero = l.get('genero', 'N/D')
             favs_texto.append(f"- {l['titulo']} (⭐{l['nota']:.1f}, género: {genero})")
         favs_texto_str = "\n".join(favs_texto)
 
-        # Limitar tamanho do prompt
         tbr_str = ', '.join(tbr_atual[:15]) if tbr_atual else 'Nenhum'
         vistos_str = ', '.join(vistos[:15]) if vistos else 'Nenhum'
 
