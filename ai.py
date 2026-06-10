@@ -10,7 +10,7 @@ import config
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('CosmoBot')
 
-# Gemini - tentar novo pacote primeiro, depois o antigo como fallback
+# ========== GEMINI (google.genai) ==========
 GEMINI_DISPONIVEL = False
 GEMINI_USE_LEGACY = False
 
@@ -32,159 +32,200 @@ except ImportError:
     except Exception as e:
         logger.warning(f"⚠️ Erro ao configurar Gemini: {e}")
 
-# DeepSeek
-DEEPSEEK_DISPONIVEL = bool(config.DEEPSEEK_API_KEY)
-if DEEPSEEK_DISPONIVEL:
-    logger.info("✅ DeepSeek API key configurada")
+# ========== GROQ (gratuito, fallback) ==========
+GROQ_DISPONIVEL = False
+GROQ_CLIENT = None
+
+try:
+    import groq
+    if config.GROQ_API_KEY:
+        GROQ_CLIENT = groq.AsyncGroq(api_key=config.GROQ_API_KEY)
+        GROQ_DISPONIVEL = True
+        logger.info("✅ Groq configurado com sucesso (gratuito)")
+    else:
+        logger.warning("⚠️ GROQ_API_KEY não configurada")
+except ImportError:
+    logger.warning("⚠️ Biblioteca groq não instalada. Tente: pip install groq")
+except Exception as e:
+    logger.warning(f"⚠️ Erro ao configurar Groq: {e}")
+
+# ========== CONFIGURAÇÕES ==========
+TIMEOUT_IA = 25  # segundos
+TIMEOUT_GROQ = 20
+
+# Modelos para fallback (Groq tem vários gratuitos)
+GROQ_MODELOS = [
+    "mixtral-8x7b-32768",  # Mais inteligente, mais lento
+    "llama3-70b-8192",      # Muito bom, rápido
+    "llama3-8b-8192",       # Mais rápido, menos preciso
+    "gemma2-9b-it",         # Google Gemma, bom equilíbrio
+]
 
 
 async def ai_json_hibrido(prompt: str) -> dict:
-    # 1. DeepSeek
-    if DEEPSEEK_DISPONIVEL:
-        headers = {"Authorization": f"Bearer {config.DEEPSEEK_API_KEY}", "Content-Type": "application/json"}
-        payload = {
-            "model": "deepseek-chat",
-            "messages": [{"role": "user", "content": f"{prompt}\n\nRESPONDE APENAS COM JSON VÁLIDO. NADA MAIS."}],
-            "temperature": 0.2,
-            "response_format": {"type": "json_object"}
-        }
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post("https://api.deepseek.com/v1/chat/completions", headers=headers, json=payload, timeout=30) as resp:
-                    if resp.status == 200:
-                        res_json = await resp.json()
-                        txt = res_json["choices"][0]["message"]["content"]
-                        txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.IGNORECASE)
-                        logger.info("✅ DeepSeek respondeu (JSON)")
-                        return json.loads(txt)
-                    else:
-                        logger.warning(f"⚠️ DeepSeek erro HTTP {resp.status}")
-        except asyncio.TimeoutError:
-            logger.warning("⚠️ DeepSeek timeout (30s)")
-        except Exception as e:
-            logger.warning(f"⚠️ DeepSeek falhou: {e}")
-
-    # 2. Gemini (novo pacote ou legado)
+    """
+    Tenta Gemini primeiro, se falhar usa Groq como fallback.
+    Ambos são gratuitos.
+    """
+    
+    # 1. Tenta Gemini
     if GEMINI_DISPONIVEL:
         try:
             if GEMINI_USE_LEGACY:
                 import google.generativeai as genai_legacy
                 model = genai_legacy.GenerativeModel(config.GEMINI_MODEL)
-                response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
+                response = await asyncio.wait_for(
+                    model.generate_content_async(
+                        prompt, 
+                        generation_config={"response_mime_type": "application/json"}
+                    ),
+                    timeout=TIMEOUT_IA
+                )
                 txt = response.text if response.text else "{}"
             else:
                 client = genai.Client(api_key=config.GEMINI_API_KEY)
-                response = client.models.generate_content(
-                    model=config.GEMINI_MODEL,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        temperature=0.2
-                    )
+                response = await asyncio.wait_for(
+                    client.aio.models.generate_content(
+                        model=config.GEMINI_MODEL,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            temperature=0.2
+                        )
+                    ),
+                    timeout=TIMEOUT_IA
                 )
                 txt = response.text if response.text else "{}"
             
             txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.IGNORECASE)
             logger.info("✅ Gemini respondeu (JSON)")
             return json.loads(txt)
+            
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ Gemini timeout, a tentar Groq...")
         except Exception as e:
-            logger.warning(f"⚠️ Gemini falhou: {e}")
+            logger.warning(f"⚠️ Gemini falhou: {e}, a tentar Groq...")
 
+    # 2. Fallback: Groq (gratuito)
+    if GROQ_DISPONIVEL and GROQ_CLIENT:
+        for modelo in GROQ_MODELOS:
+            try:
+                completion = await asyncio.wait_for(
+                    GROQ_CLIENT.chat.completions.create(
+                        model=modelo,
+                        messages=[
+                            {"role": "system", "content": "You are a helpful assistant. Respond only with valid JSON. No explanations, no markdown, just pure JSON."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=0.2,
+                        response_format={"type": "json_object"}
+                    ),
+                    timeout=TIMEOUT_GROQ
+                )
+                txt = completion.choices[0].message.content
+                txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.IGNORECASE)
+                logger.info(f"✅ Groq respondeu (JSON) usando {modelo}")
+                return json.loads(txt)
+                
+            except asyncio.TimeoutError:
+                logger.warning(f"⚠️ Groq timeout com {modelo}")
+                continue
+            except Exception as e:
+                logger.warning(f"⚠️ Groq falhou com {modelo}: {e}")
+                continue
+    
     return {}
 
 
 async def ai_text_hibrido(prompt: str) -> str:
-    # 1. DeepSeek
-    if DEEPSEEK_DISPONIVEL:
-        headers = {"Authorization": f"Bearer {config.DEEPSEEK_API_KEY}", "Content-Type": "application/json"}
-        payload = {"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "temperature": 0.7}
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post("https://api.deepseek.com/v1/chat/completions", headers=headers, json=payload, timeout=30) as resp:
-                    if resp.status == 200:
-                        res_json = await resp.json()
-                        txt = res_json["choices"][0]["message"]["content"]
-                        logger.info("✅ DeepSeek respondeu (texto)")
-                        return txt
-                    else:
-                        logger.warning(f"⚠️ DeepSeek erro HTTP {resp.status}")
-        except asyncio.TimeoutError:
-            logger.warning("⚠️ DeepSeek timeout (30s)")
-        except Exception as e:
-            logger.warning(f"⚠️ DeepSeek falhou: {e}")
-
-    # 2. Gemini
+    """
+    Tenta Gemini primeiro, se falhar usa Groq como fallback.
+    """
+    
+    # 1. Tenta Gemini
     if GEMINI_DISPONIVEL:
         try:
             if GEMINI_USE_LEGACY:
                 import google.generativeai as genai_legacy
                 model = genai_legacy.GenerativeModel(config.GEMINI_MODEL)
-                response = model.generate_content(prompt)
+                response = await asyncio.wait_for(
+                    model.generate_content_async(prompt),
+                    timeout=TIMEOUT_IA
+                )
                 return response.text if response.text else "❌ Sem resposta do Gemini."
             else:
                 client = genai.Client(api_key=config.GEMINI_API_KEY)
-                response = client.models.generate_content(
-                    model=config.GEMINI_MODEL,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(temperature=0.7)
+                response = await asyncio.wait_for(
+                    client.aio.models.generate_content(
+                        model=config.GEMINI_MODEL,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(temperature=0.7)
+                    ),
+                    timeout=TIMEOUT_IA
                 )
                 return response.text if response.text else "❌ Sem resposta do Gemini."
-        except Exception as e:
-            logger.warning(f"⚠️ Gemini falhou: {e}")
-
-    return "❌ Nenhuma IA disponível."
-
-
-async def ai_json_com_retry(prompt: str, tentativas: int = 3, espera_base: int = 2) -> dict:
-    """
-    Exponential backoff: espera = 2s, 4s, 8s...
-    """
-    for i in range(tentativas):
-        try:
-            return await asyncio.wait_for(ai_json_hibrido(prompt), timeout=45)
+                
         except asyncio.TimeoutError:
-            if i < tentativas - 1:
-                tempo_pausa = espera_base * (2 ** i)
-                logger.warning(f"⏳ Timeout na tentativa {i+1}/{tentativas}. Re-tentativa em {tempo_pausa}s...")
-                await asyncio.sleep(tempo_pausa)
-                continue
-            logger.error(f"❌ JSON falhou após {tentativas} tentativas (timeout)")
-            return {}
+            logger.warning("⚠️ Gemini timeout, a tentar Groq...")
         except Exception as e:
-            if i < tentativas - 1:
-                tempo_pausa = espera_base * (2 ** i)
-                logger.warning(f"⚠️ Erro na tentativa {i+1}/{tentativas}: {e}. Re-tentativa em {tempo_pausa}s...")
-                await asyncio.sleep(tempo_pausa)
+            logger.warning(f"⚠️ Gemini falhou: {e}, a tentar Groq...")
+
+    # 2. Fallback: Groq (gratuito)
+    if GROQ_DISPONIVEL and GROQ_CLIENT:
+        for modelo in GROQ_MODELOS[:2]:  # Só tenta os 2 melhores para texto
+            try:
+                completion = await asyncio.wait_for(
+                    GROQ_CLIENT.chat.completions.create(
+                        model=modelo,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.7
+                    ),
+                    timeout=TIMEOUT_GROQ
+                )
+                txt = completion.choices[0].message.content
+                logger.info(f"✅ Groq respondeu (texto) usando {modelo}")
+                return txt
+                
+            except asyncio.TimeoutError:
+                logger.warning(f"⚠️ Groq timeout com {modelo}")
                 continue
-            logger.error(f"❌ JSON falhou após {tentativas} tentativas: {e}")
-            return {}
+            except Exception as e:
+                logger.warning(f"⚠️ Groq falhou com {modelo}: {e}")
+                continue
+    
+    return "❌ Nenhuma IA disponível. Tenta novamente mais tarde."
+
+
+async def ai_json_com_retry(prompt: str, tentativas: int = 2, espera_base: int = 1) -> dict:
+    """Tenta até {tentativas} vezes com exponential backoff"""
+    for i in range(tentativas):
+        resultado = await ai_json_hibrido(prompt)
+        if resultado:
+            return resultado
+        
+        if i < tentativas - 1:
+            tempo_pausa = espera_base * (2 ** i)
+            logger.warning(f"⏳ Tentativa {i+1}/{tentativas} falhou. Re-tentativa em {tempo_pausa}s...")
+            await asyncio.sleep(tempo_pausa)
+    
+    logger.error(f"❌ JSON falhou após {tentativas} tentativas")
     return {}
 
 
-async def ai_text_com_retry(prompt: str, tentativas: int = 3, espera_base: int = 2) -> str:
-    """
-    Exponential backoff: espera = 2s, 4s, 8s...
-    """
+async def ai_text_com_retry(prompt: str, tentativas: int = 2, espera_base: int = 1) -> str:
+    """Tenta até {tentativas} vezes com exponential backoff"""
     for i in range(tentativas):
-        try:
-            return await asyncio.wait_for(ai_text_hibrido(prompt), timeout=45)
-        except asyncio.TimeoutError:
-            if i < tentativas - 1:
-                tempo_pausa = espera_base * (2 ** i)
-                logger.warning(f"⏳ Timeout na tentativa {i+1}/{tentativas}. Re-tentativa em {tempo_pausa}s...")
-                await asyncio.sleep(tempo_pausa)
-                continue
-            logger.error(f"❌ Texto falhou após {tentativas} tentativas (timeout)")
-            return "❌ A IA demorou demasiado a responder. Tenta novamente."
-        except Exception as e:
-            if i < tentativas - 1:
-                tempo_pausa = espera_base * (2 ** i)
-                logger.warning(f"⚠️ Erro na tentativa {i+1}/{tentativas}: {e}. Re-tentativa em {tempo_pausa}s...")
-                await asyncio.sleep(tempo_pausa)
-                continue
-            logger.error(f"❌ Texto falhou após {tentativas} tentativas: {e}")
-            return "❌ Erro na IA. Tenta novamente mais tarde."
-    return "❌ Erro na IA."
+        resultado = await ai_text_hibrido(prompt)
+        if resultado and not resultado.startswith("❌"):
+            return resultado
+        
+        if i < tentativas - 1:
+            tempo_pausa = espera_base * (2 ** i)
+            logger.warning(f"⏳ Tentativa {i+1}/{tentativas} falhou. Re-tentativa em {tempo_pausa}s...")
+            await asyncio.sleep(tempo_pausa)
+    
+    logger.error(f"❌ Texto falhou após {tentativas} tentativas")
+    return "❌ A IA está indisponível no momento. Tenta novamente mais tarde."
 
 
 def validar_resposta_ia_pydantic(resposta: dict, schema_class):
@@ -205,12 +246,13 @@ def validar_resposta_ia(resposta: dict, campos: list) -> dict:
 
 
 async def extrair_texto_da_imagem(url_imagem: str) -> str:
-    """Extrai texto de imagem usando IA (placeholder - pode ser implementado com Gemini Vision)"""
+    """Extrai texto de imagem usando IA (implementar com Gemini Vision se necessário)"""
     # TODO: Implementar com Gemini Vision
     return ""
 
 
 async def obter_info_livro(query: str) -> dict:
+    """Busca informação do livro na Open Library, fallback para IA"""
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(f"https://openlibrary.org/search.json?q={query}&limit=1") as resp:
@@ -233,8 +275,17 @@ async def obter_info_livro(query: str) -> dict:
                             "fonte": "Open Library",
                         }
     except Exception as e:
-        logger.error(f"Erro ao pesquisar livro: {e}")
-    return {"titulo": query, "autor": "Desconhecido", "genero": "N/D", "paginas": 0, "ano": "N/D", "capa": "", "fonte": "IA"}
+        logger.error(f"Erro ao pesquisar livro na Open Library: {e}")
+    
+    return {
+        "titulo": query, 
+        "autor": "Desconhecido", 
+        "genero": "N/D", 
+        "paginas": 0, 
+        "ano": "N/D", 
+        "capa": "", 
+        "fonte": "IA"
+    }
 
 
 async def detetar_e_agendar_serie(titulo_livro: str, mes_origem: str, canal) -> list:
@@ -262,6 +313,7 @@ Responde apenas em JSON: {{"sequencias": ["Nome do Livro 2 - Autor", ...]}}
         if not any(prox.lower().strip() == x.lower().strip() for x in livros_tbr_flat()):
             dados["tbr_por_mes"][mes_destino].append(prox)
             mensagens.append(f"• **{prox}** agendado para **{mes_destino}**")
+    
     if mensagens:
         guardar_dados()
     return mensagens
