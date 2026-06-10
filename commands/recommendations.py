@@ -3,8 +3,8 @@ from discord.ext import commands
 import logging
 
 import config
-from storage import dados, guardar_dados
-from utils import formatar_livro, livros_tbr_flat, livros_bem_avaliados, garantir_canal
+from storage import dados, guardar_dados, livros_tbr_flat
+from utils import formatar_livro, livros_bem_avaliados, garantir_canal
 from ai import ai_json_com_retry, validar_resposta_ia_pydantic, validar_resposta_ia
 from models import RespostaRecomendacoes
 from views import ViewSugestoes
