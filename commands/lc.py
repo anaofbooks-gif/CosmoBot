@@ -20,7 +20,8 @@ class LCCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="meta")
+   @commands.command(name="meta")
+   @commands.cooldown(1, 20, commands.BucketType.user)  # 1 vez a cada 20 segundos
     async def meta(self, ctx, mes: str, livro: str, *, cronograma: str):
         mes_cap = normalizar_categoria(mes)
         if mes_cap not in config.MESES_ORDEM:
