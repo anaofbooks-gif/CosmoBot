@@ -16,33 +16,33 @@ class RecommendationsCog(commands.Cog):
         self.bot = bot
 
     @commands.command(name="recomendar")
-async def recomendar(self, ctx):
-    guild = ctx.guild
-    if not guild:
-        return await ctx.send("❌ Este comando só pode ser usado dentro de um servidor.")
+    async def recomendar(self, ctx):
+        guild = ctx.guild
+        if not guild:
+            return await ctx.send("❌ Este comando só pode ser usado dentro de um servidor.")
 
-    favoritos = livros_bem_avaliados(dados, 4.0)
-    if not favoritos:
-        return await ctx.send("📭 Ainda não tens livros avaliados com **4 estrelas ou mais**.\nRegista leituras com `!lido \"Título - Autor\"` e avalia com o menu de estrelas ou `!avaliar 4.5`.")
+        favoritos = livros_bem_avaliados(dados, 4.0)
+        if not favoritos:
+            return await ctx.send("📭 Ainda não tens livros avaliados com **4 estrelas ou mais**.\nRegista leituras com `!lido \"Título - Autor\"` e avalia com o menu de estrelas ou `!avaliar 4.5`.")
 
-    canal = await garantir_canal(guild, "sugestoes-leitura")
-    await ctx.send(f"🔍 A preparar sugestões com base em **{len(favoritos)}** livro(s) bem avaliado(s) em {canal.mention}...")
+        canal = await garantir_canal(guild, "sugestoes-leitura")
+        await ctx.send(f"🔍 A preparar sugestões com base em **{len(favoritos)}** livro(s) bem avaliado(s) em {canal.mention}...")
 
-    tbr_atual = livros_tbr_flat()
-    vistos = dados.get("sugestoes_vistas", [])
+        tbr_atual = livros_tbr_flat()
+        vistos = dados.get("sugestoes_vistas", [])
 
-    # Criar texto dos favoritos
-    favs_texto = []
-    for l in favoritos[:10]:
-        genero = l.get('genero', 'N/D')
-        favs_texto.append(f"- {l['titulo']} (⭐{l['nota']:.1f}, género: {genero})")
-    favs_texto_str = "\n".join(favs_texto)
+        # Criar texto dos favoritos
+        favs_texto = []
+        for l in favoritos[:10]:
+            genero = l.get('genero', 'N/D')
+            favs_texto.append(f"- {l['titulo']} (⭐{l['nota']:.1f}, género: {genero})")
+        favs_texto_str = "\n".join(favs_texto)
 
-    # Limitar tamanho do prompt para não exceder limites
-    tbr_str = ', '.join(tbr_atual[:15]) if tbr_atual else 'Nenhum'
-    vistos_str = ', '.join(vistos[:15]) if vistos else 'Nenhum'
+        # Limitar tamanho do prompt
+        tbr_str = ', '.join(tbr_atual[:15]) if tbr_atual else 'Nenhum'
+        vistos_str = ', '.join(vistos[:15]) if vistos else 'Nenhum'
 
-    prompt = f"""És um curador literário.
+        prompt = f"""És um curador literário.
 
 O leitor adorou estes livros (4+ estrelas):
 {favs_texto_str}
@@ -59,62 +59,63 @@ RESPONDE APENAS COM JSON:
   {{"titulo": "Nome", "autor": "Autor", "porque_ler": "Motivo curto"}}
 ]}}"""
 
-    try:
-        logger.info("📤 Enviando prompt para IA...")
-        resposta = await ai_json_com_retry(prompt)
-        logger.info(f"📥 Resposta da IA: {resposta}")
+        try:
+            logger.info("📤 Enviando prompt para IA...")
+            resposta = await ai_json_com_retry(prompt)
+            logger.info(f"📥 Resposta da IA: {resposta}")
 
-        livros_sugeridos = []
-        if isinstance(resposta, dict):
-            if "livros" in resposta:
-                livros_sugeridos = resposta["livros"]
-            elif "recomendacoes" in resposta:
-                livros_sugeridos = resposta["recomendacoes"]
+            livros_sugeridos = []
+            if isinstance(resposta, dict):
+                if "livros" in resposta:
+                    livros_sugeridos = resposta["livros"]
+                elif "recomendacoes" in resposta:
+                    livros_sugeridos = resposta["recomendacoes"]
 
-        if not livros_sugeridos:
-            logger.warning(f"Nenhum livro encontrado na resposta: {resposta}")
-            return await ctx.send("❌ Não consegui gerar sugestões válidas. Tenta novamente daqui a pouco.")
+            if not livros_sugeridos:
+                logger.warning(f"Nenhum livro encontrado na resposta: {resposta}")
+                return await ctx.send("❌ Não consegui gerar sugestões válidas. Tenta novamente daqui a pouco.")
 
-        await canal.send("✨ **A TUA REVISTA LITERÁRIA PERSONALIZADA** ✨\n*Sugestões baseadas nos teus livros com 4⭐ ou mais:*\n" + "\n".join(f"• {l['titulo']} ({l.get('nota', 0):.1f}⭐)" for l in favoritos[:5]))
+            await canal.send("✨ **A TUA REVISTA LITERÁRIA PERSONALIZADA** ✨\n*Sugestões baseadas nos teus livros com 4⭐ ou mais:*\n" + "\n".join(f"• {l['titulo']} ({l.get('nota', 0):.1f}⭐)" for l in favoritos[:5]))
 
-        titulos_botoes = []
-        for livro in livros_sugeridos[:3]:
-            titulo = livro.get("titulo", "")
-            autor = livro.get("autor", "")
-            if not titulo or not autor:
-                continue
-            titulo_completo = formatar_livro(titulo, autor)
+            titulos_botoes = []
+            for livro in livros_sugeridos[:3]:
+                titulo = livro.get("titulo", "")
+                autor = livro.get("autor", "")
+                if not titulo or not autor:
+                    continue
+                titulo_completo = formatar_livro(titulo, autor)
 
-            if titulo_completo.lower().strip() in {v.lower().strip() for v in vistos}:
-                continue
-            if any(titulo_completo.lower().strip() == x.lower().strip() for x in tbr_atual):
-                continue
+                if titulo_completo.lower().strip() in {v.lower().strip() for v in vistos}:
+                    continue
+                if any(titulo_completo.lower().strip() == x.lower().strip() for x in tbr_atual):
+                    continue
 
-            titulos_botoes.append(titulo_completo)
+                titulos_botoes.append(titulo_completo)
 
-            embed = discord.Embed(
-                title=f"📖 {titulo_completo}",
-                description=f"**Autor:** {autor}\n\n{livro.get('porque_ler', 'Uma sugestão alinhada com o teu gosto.')}",
-                color=discord.Color.from_rgb(255, 182, 193)
-            )
-            embed.add_field(name="📅 Publicação", value=livro.get("data_publicacao", "Desconhecida"), inline=True)
-            embed.add_field(name="🎭 Género", value=livro.get("genero", "N/D"), inline=True)
-            embed.add_field(name="🧬 Subgénero", value=livro.get("subgenero", "N/D"), inline=True)
+                embed = discord.Embed(
+                    title=f"📖 {titulo_completo}",
+                    description=f"**Autor:** {autor}\n\n{livro.get('porque_ler', 'Uma sugestão alinhada com o teu gosto.')}",
+                    color=discord.Color.from_rgb(255, 182, 193)
+                )
+                embed.add_field(name="📅 Publicação", value=livro.get("data_publicacao", "Desconhecida"), inline=True)
+                embed.add_field(name="🎭 Género", value=livro.get("genero", "N/D"), inline=True)
+                embed.add_field(name="🧬 Subgénero", value=livro.get("subgenero", "N/D"), inline=True)
 
-            if livro.get("link_capa", "").startswith("http"):
-                embed.set_image(url=livro["link_capa"])
+                if livro.get("link_capa", "").startswith("http"):
+                    embed.set_image(url=livro["link_capa"])
 
-            await canal.send(embed=embed)
+                await canal.send(embed=embed)
 
-        if not titulos_botoes:
-            return await ctx.send("❌ Todas as sugestões geradas já tinham sido vistas ou estão na TBR.")
+            if not titulos_botoes:
+                return await ctx.send("❌ Todas as sugestões geradas já tinham sido vistas ou estão na TBR.")
 
-        await canal.send("✨ **Adiciona as tuas escolhas instantaneamente:**", view=ViewSugestoes(titulos_botoes, titulos_botoes))
-        await ctx.send(f"✅ Painel visual gerado com sucesso em {canal.mention}!")
+            await canal.send("✨ **Adiciona as tuas escolhas instantaneamente:**", view=ViewSugestoes(titulos_botoes, titulos_botoes))
+            await ctx.send(f"✅ Painel visual gerado com sucesso em {canal.mention}!")
 
-    except Exception as e:
-        logger.exception(f"Erro ao processar recomendações: {e}")
-        await ctx.send(f"❌ Erro ao processar recomendações: {e}")
+        except Exception as e:
+            logger.exception(f"Erro ao processar recomendações: {e}")
+            await ctx.send(f"❌ Erro ao processar recomendações: {e}")
+
     @commands.command(name="marcarsugestoes")
     async def marcar_sugestoes_vistas(self, ctx, *, titulos: str):
         vistos = {v.lower().strip() for v in dados.setdefault("sugestoes_vistas", [])}
