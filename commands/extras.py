@@ -21,7 +21,7 @@ class ExtrasCog(commands.Cog):
         await ctx.send(f"🔮 A invocar o espírito de {personagem}...")
         prompt = f"Assume integralmente a personalidade da personagem fictícia '{personagem}'. Responde estritamente na primeira pessoa, em português de Portugal. Pergunta: '{pergunta}'"
         try:
-            res = await ai_text_com_retry(prompt)
+            res = await ai_text_hibrido(prompt)
             await enviar_mensagem_longa(ctx, f"**[{personagem}]:** {res}")
         except Exception as e:
             logger.exception(f"Erro na entrevista: {e}")
