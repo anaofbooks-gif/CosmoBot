@@ -3,6 +3,7 @@ import math
 import random
 import calendar
 import textwrap
+import aiohttp
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from PIL import Image, ImageDraw, ImageFont
@@ -10,6 +11,8 @@ from PIL import Image, ImageDraw, ImageFont
 import config
 from utils import numero_mes, normalizar_categoria
 from storage import dados
+
+logger = logging.getLogger('CosmoBot')
 
 # ========== CORES TEMÁTICAS POR MÊS ==========
 
@@ -282,46 +285,91 @@ def analisar_titulo_alfabeto(titulo: str):
 
 
 async def gerar_fundo_calendario(mes: str, ano: int) -> Optional[io.BytesIO]:
-    """Gera uma imagem de fundo temática para o calendário usando Gemini Imagen."""
+    """Gera fundo temático usando Stable Diffusion (via Replicate)"""
+    import aiohttp
+    import logging
+    logger = logging.getLogger('CosmoBot')
+    
+    # Prompts para Stable Diffusion
     prompts = {
-        "Janeiro": "fundo azul inverno com flocos de neve suaves, estilo aquarela, tons pastel",
-        "Fevereiro": "fundo romântico coração e flores, tons rosa e vermelho, estilo aquarela",
-        "Março": "fundo primavera com flores silvestres e folhas verdes, tons pastel, estilo aquarela",
-        "Abril": "fundo de Páscoa com ovos decorados e flores, tons lilás e amarelo, estilo aquarela",
-        "Maio": "fundo de campo de flores coloridas, céu azul claro, estilo aquarela",
-        "Junho": "fundo de praia, areia clara e mar azul, sol brilhante, estilo aquarela de verão",
-        "Julho": "fundo de férias de verão, palmeiras e sol, cores quentes, estilo tropical aquarela",
-        "Agosto": "fundo de pôr do sol na praia, tons laranja e rosa, estilo aquarela",
-        "Setembro": "fundo de folhas de outono caindo, tons laranja e dourado, estilo aquarela",
-        "Outubro": "fundo de Halloween com abóboras e folhas secas, tons laranja e roxo, estilo aquarela",
-        "Novembro": "fundo de outono profundo, tons castanho e vinho, estilo aquarela",
-        "Dezembro": "fundo de Natal com árvores e neve, tons vermelho e verde, estilo aquarela",
+        "Janeiro": "winter landscape with soft snowflakes, light blue and white watercolor style, minimalist, no text, no letters",
+        "Fevereiro": "romantic background with hearts and cherry blossoms, soft pink and red watercolor style, no text",
+        "Março": "spring flowers and green leaves, pastel colors, watercolor style, no text",
+        "Abril": "Easter eggs and bunnies, lilac and yellow watercolor, cute style, no text",
+        "Maio": "flower field with blue sky, vibrant but soft watercolor, no text",
+        "Junho": "tropical beach with palm trees, turquoise water, bright sun, watercolor summer style, no text",
+        "Julho": "summer vacation beach with palm trees, hot sun, warm colors, tropical watercolor, no text",
+        "Agosto": "sunset beach with orange and pink sky, calm ocean, palm trees silhouette, watercolor, no text",
+        "Setembro": "autumn leaves falling, orange and golden watercolor, soft style, no text",
+        "Outubro": "Halloween pumpkins and dry leaves, orange and purple watercolor, mysterious, no text",
+        "Novembro": "deep autumn with brown and wine colors, dry leaves, melancholic watercolor, no text",
+        "Dezembro": "Christmas trees with snow falling, red and green watercolor, festive, no text"
     }
     
-    from ai import ai_client
-    if not ai_client:
-        return None
+    prompt = prompts.get(mes, f"soft abstract watercolor background for {mes}, pastel colors, no text, no letters")
+    negative_prompt = "text, letters, words, writing, signature, watermark, human, people, faces"
     
-    prompt = prompts.get(mes, f"fundo abstrato suave para calendário de {mes}, estilo aquarela, tons pastel")
+    replicate_key = os.getenv("REPLICATE_API_KEY")
+    if not replicate_key:
+        logger.warning("⚠️ REPLICATE_API_KEY não configurada. Usando fundo padrão.")
+        return None
     
     try:
-        response = ai_client.models.generate_content(
-            model="imagen-3.0-generate-001",
-            contents=prompt,
-            config={
-                "response_modalities": ["IMAGE"],
-                "image_config": {
-                    "aspect_ratio": "16:9",
-                    "output_format": "png"
-                }
-            }
-        )
+        headers = {
+            "Authorization": f"Token {replicate_key}",
+            "Content-Type": "application/json"
+        }
         
-        for part in response.parts:
-            if part.inline_data:
-                logger.info(f"🎨 Fundo IA gerado para {mes}")
-                return io.BytesIO(part.inline_data.data)
+        payload = {
+            "version": "stability-ai/stable-diffusion-3.5-large",
+            "input": {
+                "prompt": prompt,
+                "negative_prompt": negative_prompt,
+                "width": 1408,
+                "height": 896,
+                "num_outputs": 1,
+                "scheduler": "DPMSolverMultistep",
+                "num_inference_steps": 28,
+                "guidance_scale": 7.5
+            }
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            # Criar a previsão
+            async with session.post("https://api.replicate.com/v1/predictions", headers=headers, json=payload) as resp:
+                if resp.status != 201:
+                    logger.warning(f"Erro ao criar previsão: {resp.status}")
+                    return None
+                prediction = await resp.json()
+                prediction_url = prediction.get("urls", {}).get("get")
+                
+                if not prediction_url:
+                    return None
+                
+                # Aguardar a conclusão
+                for _ in range(30):  # máximo 30 tentativas (30 segundos)
+                    await asyncio.sleep(1)
+                    async with session.get(prediction_url, headers=headers) as status_resp:
+                        if status_resp.status != 200:
+                            continue
+                        status_data = await status_resp.json()
+                        if status_data.get("status") == "succeeded":
+                            output = status_data.get("output", [])
+                            if output and len(output) > 0:
+                                image_url = output[0]
+                                # Descarregar a imagem
+                                async with session.get(image_url) as img_resp:
+                                    if img_resp.status == 200:
+                                        image_bytes = await img_resp.read()
+                                        logger.info(f"🎨 Fundo IA gerado para {mes}")
+                                        return io.BytesIO(image_bytes)
+                            break
+                        elif status_data.get("status") == "failed":
+                            logger.warning(f"Falha na geração: {status_data.get('error')}")
+                            break
+        
         return None
+        
     except Exception as e:
-        logger.warning(f"Erro ao gerar fundo com IA: {e}")
+        logger.warning(f"⚠️ Erro ao gerar fundo IA: {e}")
         return None
