@@ -1,3 +1,4 @@
+import logging
 import discord
 from discord.ext import commands
 from datetime import datetime
@@ -9,6 +10,7 @@ from utils import normalizar_categoria, este_ano
 from stats import estatisticas_mes, estatisticas_ano
 from images import desenhar_grafico_circular, desenhar_resumo_anual, Image
 
+logger = logging.getLogger('CosmoBot')
 
 class StatsCog(commands.Cog):
     def __init__(self, bot):
