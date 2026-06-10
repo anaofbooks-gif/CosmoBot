@@ -1,8 +1,9 @@
 import discord
 from discord.ext import commands
 import logging
+from typing import Optional
 
-# Configurar logging básico para este módulo
+# Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('CosmoBot')
 
