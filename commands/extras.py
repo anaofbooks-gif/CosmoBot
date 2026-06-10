@@ -6,7 +6,7 @@ from datetime import datetime
 
 import config
 from storage import dados
-from ai import ai_text_com_retry, obter_info_livro
+from ai import ai_text_hibrido, obter_info_livro
 from utils import enviar_mensagem_longa
 
 logger = logging.getLogger('CosmoBot')
