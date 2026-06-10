@@ -5,26 +5,51 @@ import aiohttp
 import logging
 from typing import Dict, Any, Optional
 
-from google import genai
+# Tentar importar o genai, mas com fallback
+try:
+    from google import genai
+    AI_DISPONIVEL = True
+except ImportError:
+    import google.generativeai as genai
+    AI_DISPONIVEL = True
+except ImportError as e:
+    print(f"⚠️ Google AI não disponível: {e}")
+    AI_DISPONIVEL = False
+    genai = None
+
 import config
-from models import RespostaMetas, RespostaRecomendacoes, RespostaSerie
 
 logger = logging.getLogger('CosmoBot')
-ai_client = genai.Client(api_key=config.GEMINI_API_KEY)
+
+# Só inicializa o cliente se a biblioteca estiver disponível
+if AI_DISPONIVEL and genai:
+    try:
+        ai_client = genai.Client(api_key=config.GEMINI_API_KEY)
+    except Exception as e:
+        logger.warning(f"Erro ao inicializar Gemini: {e}")
+        ai_client = None
+else:
+    ai_client = None
 
 
 async def ai_text_hibrido(prompt: str) -> str:
-    try:
-        response = ai_client.models.generate_content(
-            model=config.GEMINI_MODEL,
-            contents=prompt,
-            config={"system_instruction": "És o Cosmo, um assistente literário erudito, divertido e mágico. Responde em português de Portugal."}
-        )
-        if response.text:
-            return response.text
-    except Exception as e:
-        logger.warning(f"Gemini falhou: {e}")
+    """Tenta gerar texto usando o Gemini; se falhar, recorre ao DeepSeek."""
+    # 1. Tentativa com Gemini
+    if ai_client:
+        try:
+            response = ai_client.models.generate_content(
+                model=config.GEMINI_MODEL,
+                contents=prompt,
+                config={"system_instruction": "És o Cosmo, um assistente literário. Responde em português de Portugal."}
+            )
+            if response.text:
+                return response.text
+        except Exception as e:
+            logger.warning(f"Gemini falhou: {e}")
+    else:
+        logger.warning("Gemini não disponível")
 
+    # 2. Fallback para DeepSeek (se configurado)
     if config.DEEPSEEK_API_KEY:
         headers = {"Authorization": f"Bearer {config.DEEPSEEK_API_KEY}", "Content-Type": "application/json"}
         payload = {"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "temperature": 0.7}
@@ -34,27 +59,39 @@ async def ai_text_hibrido(prompt: str) -> str:
                     if resp.status == 200:
                         res_json = await resp.json()
                         return res_json["choices"][0]["message"]["content"]
+                    else:
+                        logger.error(f"DeepSeek respondeu com status {resp.status}")
         except Exception as ds_err:
             logger.warning(f"DeepSeek falhou: {ds_err}")
-    return "❌ Sem resposta da IA."
+    
+    return "❌ Não foi possível obter resposta da IA."
 
 
 async def ai_json_hibrido(prompt: str) -> Dict[str, Any]:
-    try:
-        response = ai_client.models.generate_content(
-            model=config.GEMINI_MODEL,
-            contents=prompt,
-            config={"response_mime_type": "application/json", "system_instruction": "Responde estritamente com JSON."}
-        )
-        txt = response.text if response.text else "{}"
-        txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.IGNORECASE)
-        return json.loads(txt)
-    except Exception as e:
-        logger.warning(f"Gemini JSON falhou: {e}")
+    """Tenta obter JSON usando o Gemini; se falhar, recorre ao DeepSeek."""
+    # 1. Tentativa com Gemini
+    if ai_client:
+        try:
+            response = ai_client.models.generate_content(
+                model=config.GEMINI_MODEL,
+                contents=prompt,
+                config={"response_mime_type": "application/json"}
+            )
+            txt = response.text if response.text else "{}"
+            txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.IGNORECASE)
+            return json.loads(txt)
+        except Exception as e:
+            logger.warning(f"Gemini JSON falhou: {e}")
 
+    # 2. Fallback para DeepSeek
     if config.DEEPSEEK_API_KEY:
         headers = {"Authorization": f"Bearer {config.DEEPSEEK_API_KEY}", "Content-Type": "application/json"}
-        payload = {"model": "deepseek-chat", "messages": [{"role": "user", "content": f"{prompt}\n\nResponde APENAS com JSON."}], "temperature": 0.2, "response_format": {"type": "json_object"}}
+        payload = {
+            "model": "deepseek-chat",
+            "messages": [{"role": "user", "content": f"{prompt}\n\nResponde APENAS com JSON válido, sem texto adicional."}],
+            "temperature": 0.2,
+            "response_format": {"type": "json_object"}
+        }
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post("https://api.deepseek.com/v1/chat/completions", headers=headers, json=payload, timeout=15) as resp:
@@ -65,6 +102,7 @@ async def ai_json_hibrido(prompt: str) -> Dict[str, Any]:
                         return json.loads(txt)
         except Exception as ds_err:
             logger.warning(f"DeepSeek JSON falhou: {ds_err}")
+    
     return {}
 
 
@@ -81,6 +119,7 @@ async def ai_text_com_retry(prompt: str, tentativas: int = 3, espera: int = 5) -
             if i < tentativas - 1:
                 await asyncio.sleep(espera * (i + 1))
                 continue
+            logger.error(f"Erro na IA: {e}")
             return f"❌ Erro na IA: {e}"
     return ""
 
@@ -105,7 +144,7 @@ def validar_resposta_ia_pydantic(resposta: Dict, schema_class) -> Optional[Any]:
         return None
 
 
-def validar_resposta_ia(resposta: Dict, campos: List[str]) -> Dict:
+def validar_resposta_ia(resposta: Dict, campos: list) -> Dict:
     if not isinstance(resposta, dict):
         return {}
     for campo in campos:
@@ -115,6 +154,9 @@ def validar_resposta_ia(resposta: Dict, campos: List[str]) -> Dict:
 
 
 async def extrair_texto_da_imagem(url_imagem: str) -> str:
+    """Usa Gemini Vision para extrair texto de um print (requer a biblioteca)"""
+    if not ai_client:
+        return ""
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url_imagem) as resp:
@@ -150,7 +192,38 @@ async def obter_info_livro(query: str) -> Dict:
                             "genero": ", ".join(doc.get("subject", [])[:3]) or "N/D",
                             "paginas": doc.get("number_of_pages_median", 0),
                             "capa": f"https://covers.openlibrary.org/b/id/{doc.get('cover_i')}-L.jpg" if doc.get("cover_i") else "",
+                            "fonte": "Open Library",
                         }
-    except Exception:
-        pass
-    return {"titulo": query, "autor": "Desconhecido", "genero": "N/D", "paginas": 0, "capa": ""}
+    except Exception as e:
+        logger.warning(f"Erro ao pesquisar livro: {e}")
+    return {"titulo": query, "autor": "Desconhecido", "genero": "N/D", "paginas": 0, "capa": "", "fonte": "IA"}
+
+
+async def detetar_e_agendar_serie(titulo_livro: str, mes_origem: str, canal) -> list:
+    prompt = f"""
+O utilizador adicionou o livro "{titulo_livro}" para leitura em "{mes_origem}".
+Se este livro fizer parte de uma série literária conhecida, identifica os próximos livros da série (máximo 3).
+Responde apenas em JSON: {{"sequencias": ["Nome do Livro 2 - Autor", ...]}}
+"""
+    resposta = await ai_json_com_retry(prompt)
+    sequencias = resposta.get("sequencias", [])
+    if not sequencias:
+        return []
+    
+    from storage import dados, guardar_dados, livros_tbr_flat
+    import config
+    
+    idx_mes_atual = config.MESES_ORDEM.index(mes_origem) if mes_origem in config.MESES_ORDEM else datetime.now().month - 1
+    if mes_origem == "Geral":
+        idx_mes_atual = datetime.now().month - 1
+    
+    mensagens = []
+    for i, prox in enumerate(sequencias):
+        idx_destino = (idx_mes_atual + 1 + i) % 12
+        mes_destino = config.MESES_ORDEM[idx_destino]
+        if not any(prox.lower().strip() == x.lower().strip() for x in livros_tbr_flat()):
+            dados["tbr_por_mes"][mes_destino].append(prox)
+            mensagens.append(f"• **{prox}** agendado para **{mes_destino}**")
+    if mensagens:
+        guardar_dados()
+    return mensagens
