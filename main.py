@@ -4,8 +4,7 @@ import discord
 from discord.ext import commands
 
 import config
-from storage import carregar_dados, guardar_dados, dados
-from tasks import autosave_loop, verificar_lembretes_loop, resumos_automaticos_loop, verificar_lc_concluidas
+from storage import *
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('CosmoBot')
@@ -16,16 +15,18 @@ bot = commands.Bot(command_prefix=config.COMMAND_PREFIX, intents=intents)
 
 
 async def carregar_cogs():
-    await bot.load_extension("commands.tbr")
-    await bot.load_extension("commands.reading")
-    await bot.load_extension("commands.challenges")
-    await bot.load_extension("commands.lc")
-    await bot.load_extension("commands.recommendations")
-    await bot.load_extension("commands.bookstagram")
-    await bot.load_extension("commands.stats_cog")
-    await bot.load_extension("commands.extras")
-    await bot.load_extension("commands.admin")
-    logger.info("✅ Todos os cogs carregados!")
+    """Carrega todos os cogs"""
+    cogs = ["tbr", "reading", "challenges", "lc", "recommendations", "bookstagram", "stats_cog", "extras", "admin"]
+    for cog in cogs:
+        try:
+            await bot.load_extension(f"commands.{cog}")
+            logger.info(f"✅ Cog {cog} carregado")
+        except Exception as e:
+            logger.error(f"❌ Falha ao carregar {cog}: {e}")
+    
+    logger.info(f"📋 Total de comandos registados: {len(bot.commands)}")
+    for cmd in bot.commands:
+        logger.info(f"  !{cmd.name}")
 
 
 @bot.event
@@ -33,21 +34,13 @@ async def on_ready():
     logger.info(f"👑 {bot.user} está online!")
     logger.info(f"💾 {resumo_persistencia()}")
     await carregar_cogs()
-    if not autosave_loop.is_running():
-        autosave_loop.start()
-    if not verificar_lembretes_loop.is_running():
-        verificar_lembretes_loop.start()
-    if not resumos_automaticos_loop.is_running():
-        resumos_automaticos_loop.start()
-    if not verificar_lc_concluidas.is_running():
-        verificar_lc_concluidas.start()
-    await enviar_lembretes_pendentes_hoje()
 
 
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
+    
     user_id = str(message.author.id)
     if user_id in dados.get("review_em_andamento", {}):
         if not message.content.startswith(config.COMMAND_PREFIX):
@@ -55,6 +48,7 @@ async def on_message(message):
             texto = message.content.strip()
             if texto:
                 review.setdefault("desabafos", []).append(texto)
+            
             for anexo in message.attachments:
                 if anexo.content_type and anexo.content_type.startswith("image/"):
                     from ai import extrair_texto_da_imagem
@@ -65,22 +59,23 @@ async def on_message(message):
                     else:
                         review.setdefault("anexos", []).append(anexo.url)
                         review.setdefault("desabafos", []).append(f"[Print de mensagem: {anexo.url}]")
+            
             guardar_dados()
             await message.add_reaction("📝")
+    
     await bot.process_commands(message)
 
 
 @bot.event
 async def on_command_error(ctx, error):
-    if isinstance(error, commands.MissingRequiredArgument):
+    if isinstance(error, commands.CommandNotFound):
+        await ctx.send(f"❌ Comando não encontrado. Usa `{config.COMMAND_PREFIX}guia` para ver a lista de comandos.")
+    elif isinstance(error, commands.MissingRequiredArgument):
         await ctx.send(f"❌ Falta informação no comando. Usa `{config.COMMAND_PREFIX}guia` para ajuda.")
     elif isinstance(error, commands.BadArgument):
-        await ctx.send("❌ Um dos valores não está no formato certo. Usa `!guia` para ver exemplos.")
-    elif isinstance(error, (discord.Forbidden, discord.NotFound, discord.HTTPException)):
-        logger.warning(f"Erro Discord: {error}")
-        await ctx.send("❌ Ocorreu um erro de comunicação com o Discord. Tenta novamente.")
+        await ctx.send("❌ Um dos valores não está no formato certo.")
     else:
-        logger.exception(f"Erro não tratado: {error}")
+        logger.error(f"Erro não tratado: {error}")
         await ctx.send(f"❌ Erro inesperado: {error}")
 
 
