@@ -1,3 +1,4 @@
+import logging
 import discord
 from discord.ext import commands
 from datetime import datetime
@@ -7,6 +8,7 @@ from storage import dados, guardar_dados
 from utils import enviar_mensagem_longa
 from ai import ai_text_com_retry, extrair_texto_da_imagem
 
+logger = logging.getLogger('CosmoBot')
 
 class BookstagramCog(commands.Cog):
     def __init__(self, bot):
