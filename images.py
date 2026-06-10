@@ -11,6 +11,23 @@ import config
 from utils import numero_mes, normalizar_categoria
 from storage import dados
 
+# ========== CORES TEMÁTICAS POR MÊS ==========
+
+ESTACOES = {
+    "Janeiro": {"bg": "#e8f0f8", "header": "#4a6fa5", "texto": "#2c3e50", "destaque": "#7fb3d5", "titulo": "#2c3e50", "emoji": "❄️"},
+    "Fevereiro": {"bg": "#f5e6f0", "header": "#c44d8c", "texto": "#5a2d4a", "destaque": "#e8a0c0", "titulo": "#8b3a62", "emoji": "💕"},
+    "Março": {"bg": "#e8f5e8", "header": "#5a9e4e", "texto": "#2d4a2d", "destaque": "#a8d5a0", "titulo": "#2d6a2d", "emoji": "🌸"},
+    "Abril": {"bg": "#fff0e0", "header": "#e8a040", "texto": "#5a3a1a", "destaque": "#f5d0a0", "titulo": "#c47a2a", "emoji": "🌧️"},
+    "Maio": {"bg": "#f0f5e8", "header": "#7fb07f", "texto": "#3a5a2a", "destaque": "#c5e0b4", "titulo": "#5a8a3a", "emoji": "🌺"},
+    "Junho": {"bg": "#fff8e0", "header": "#f4c542", "texto": "#7a5a1a", "destaque": "#ffdf99", "titulo": "#daa520", "emoji": "☀️", "sol": True},
+    "Julho": {"bg": "#ffe0e0", "header": "#e86a5a", "texto": "#7a2a1a", "destaque": "#ffb3a3", "titulo": "#cc4422", "emoji": "🏖️", "sol": True, "palmeira": True},
+    "Agosto": {"bg": "#f5e6d3", "header": "#d4a55a", "texto": "#6b4c2a", "destaque": "#f5d5a0", "titulo": "#b8860b", "emoji": "🌊", "sol": True, "palmeira": True},
+    "Setembro": {"bg": "#f0ebe0", "header": "#b8860b", "texto": "#5a4a2a", "destaque": "#e8d5a0", "titulo": "#8b6508", "emoji": "🍂"},
+    "Outubro": {"bg": "#f5e0d0", "header": "#e87a30", "texto": "#5a3a1a", "destaque": "#ffcc99", "titulo": "#cc5500", "emoji": "🎃", "abobora": True},
+    "Novembro": {"bg": "#e8e0e8", "header": "#8b6b8b", "texto": "#4a3a4a", "destaque": "#c5aec5", "titulo": "#6b4a6b", "emoji": "🍁"},
+    "Dezembro": {"bg": "#e0f0f5", "header": "#2d8f8f", "texto": "#1a4a5a", "destaque": "#a0d0d5", "titulo": "#1a6a7a", "emoji": "🎄", "neve": True},
+}
+
 
 def carregar_fonte(tamanho: int, negrito: bool = False):
     if ImageFont is None:
@@ -84,6 +101,7 @@ def desenhar_grafico_circular(titulo: str, categorias: List[str], valores: List[
 def desenhar_calendario_leituras(mes: str, ano: int, imagem_fundo: Optional[io.BytesIO] = None) -> io.BytesIO:
     if Image is None or ImageDraw is None:
         raise RuntimeError("Pillow não instalada.")
+    
     mes_num = numero_mes(mes)
     metas_por_dia = {}
     for lembrete in dados["lembretes_metas"]:
@@ -93,10 +111,22 @@ def desenhar_calendario_leituras(mes: str, ano: int, imagem_fundo: Optional[io.B
                 metas_por_dia.setdefault(data.day, []).append(f"{lembrete.get('livro', 'Livro')}: {lembrete.get('meta', '')}")
         except (TypeError, ValueError):
             continue
+    
     largura, altura = 1400, 1000
     margem, topo = 60, 150
     largura_celula = (largura - margem * 2) // 7
     altura_celula = 115
+    
+    # Usar cores temáticas do mês
+    tema = ESTACOES.get(mes, ESTACOES["Janeiro"])
+    cor_fundo = tema["bg"]
+    cor_header = tema["header"]
+    cor_texto = tema["texto"]
+    cor_destaque = tema["destaque"]
+    cor_titulo = tema["titulo"]
+    emoji = tema.get("emoji", "📚")
+    
+    # Se tiver imagem de fundo IA, usa-a; senão usa cor sólida
     if imagem_fundo:
         try:
             imagem = Image.open(imagem_fundo).resize((largura, altura)).convert("RGBA")
@@ -104,45 +134,86 @@ def desenhar_calendario_leituras(mes: str, ano: int, imagem_fundo: Optional[io.B
             imagem = Image.alpha_composite(imagem, overlay).convert("RGB")
         except Exception:
             imagem_fundo = None
+    
     if not imagem_fundo:
-        estacoes = {"Janeiro": "#e8f0f8", "Fevereiro": "#f5e6f0", "Março": "#e8f5e8", "Abril": "#fff0e0", "Maio": "#f0f5e8", "Junho": "#fff8e0", "Julho": "#ffe0e0", "Agosto": "#f5e6d3", "Setembro": "#f0ebe0", "Outubro": "#f5e0d0", "Novembro": "#e8e0e8", "Dezembro": "#e0f0f5"}
-        imagem = Image.new("RGB", (largura, altura), estacoes.get(mes, "#fff8f1"))
+        imagem = Image.new("RGB", (largura, altura), cor_fundo)
+    
     draw = ImageDraw.Draw(imagem)
+    
     fonte_titulo = carregar_fonte(46, negrito=True)
     fonte_dia_semana = carregar_fonte(24, negrito=True)
     fonte_numero = carregar_fonte(24, negrito=True)
     fonte_meta = carregar_fonte(17)
     fonte_rodape = carregar_fonte(18)
-    titulo = f"📚 Leituras conjuntas - {mes} {ano} 📚"
+    
+    titulo = f"{emoji} Leituras conjuntas - {mes} {ano} {emoji}"
     draw.text((margem + 2, 47), titulo, fill="#000000", font=fonte_titulo)
-    draw.text((margem, 45), titulo, fill="#3b2f2f", font=fonte_titulo)
+    draw.text((margem, 45), titulo, fill=cor_titulo, font=fonte_titulo)
+    
+    draw.text((margem + 2, 107), "Metas guardadas pelo comando !meta", fill="#000000", font=fonte_rodape)
+    draw.text((margem, 105), "Metas guardadas pelo comando !meta", fill=cor_destaque, font=fonte_rodape)
+    
     dias_semana = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
     for idx, dia in enumerate(dias_semana):
         x = margem + idx * largura_celula
-        draw.rounded_rectangle((x, topo, x + largura_celula - 8, topo + 42), radius=8, fill="#583d72")
+        draw.rounded_rectangle((x, topo, x + largura_celula - 8, topo + 42), radius=8, fill=cor_header)
         draw.text((x + 18, topo + 9), dia, fill="#ffffff", font=fonte_dia_semana)
+    
+    # Desenhar elementos decorativos sazonais
+    if tema.get("sol"):
+        draw.ellipse((largura - 100, 30, largura - 60, 70), fill="#FFD700", outline="#FFA500", width=3)
+        for ang in range(0, 360, 45):
+            rad = math.radians(ang)
+            x1 = largura - 80 + 25 * math.cos(rad)
+            y1 = 50 + 25 * math.sin(rad)
+            x2 = largura - 80 + 45 * math.cos(rad)
+            y2 = 50 + 45 * math.sin(rad)
+            draw.line((x1, y1, x2, y2), fill="#FFA500", width=3)
+    
+    if tema.get("palmeira"):
+        draw.line((50, altura - 100, 50, altura - 40), fill="#8B4513", width=5)
+        draw.arc((30, altura - 130, 70, altura - 90), 0, 180, fill="#228B22", width=6)
+        draw.arc((20, altura - 120, 60, altura - 80), 20, 160, fill="#228B22", width=6)
+        draw.arc((40, altura - 120, 80, altura - 80), 20, 160, fill="#228B22", width=6)
+    
+    if tema.get("abobora"):
+        draw.ellipse((30, 30, 80, 80), fill="#FF8C00", outline="#CC5500", width=2)
+        draw.rectangle((50, 20, 60, 30), fill="#228B22")
+    
+    if tema.get("neve"):
+        for _ in range(30):
+            x = random.randint(50, largura - 50)
+            y = random.randint(50, altura - 50)
+            draw.line((x - 5, y, x + 5, y), fill="#FFFFFF", width=2)
+            draw.line((x, y - 5, x, y + 5), fill="#FFFFFF", width=2)
+            draw.line((x - 4, y - 4, x + 4, y + 4), fill="#FFFFFF", width=1)
+            draw.line((x + 4, y - 4, x - 4, y + 4), fill="#FFFFFF", width=1)
+    
     semanas = calendar.monthcalendar(ano, mes_num)
     y_inicio = topo + 55
+    
     for linha, semana in enumerate(semanas):
         for coluna, dia in enumerate(semana):
             x1 = margem + coluna * largura_celula
             y1 = y_inicio + linha * altura_celula
             x2 = x1 + largura_celula - 8
             y2 = y1 + altura_celula - 8
-            draw.rounded_rectangle((x1, y1, x2, y2), radius=10, fill=(255, 255, 255, 230), outline="#d7c4b5", width=2)
+            draw.rounded_rectangle((x1, y1, x2, y2), radius=10, fill=(255, 255, 255, 230), outline=cor_destaque, width=2)
             if not dia:
                 continue
-            draw.text((x1 + 12, y1 + 10), str(dia), fill="#3b2f2f", font=fonte_numero)
+            draw.text((x1 + 12, y1 + 10), str(dia), fill=cor_texto, font=fonte_numero)
             metas = metas_por_dia.get(dia, [])
             texto_y = y1 + 42
             for meta in metas[:2]:
                 for linha_meta in textwrap.wrap(meta, width=24)[:3]:
-                    draw.text((x1 + 12, texto_y), linha_meta, fill="#315f58", font=fonte_meta)
+                    draw.text((x1 + 12, texto_y), linha_meta, fill=cor_header, font=fonte_meta)
                     texto_y += 20
             if len(metas) > 2:
-                draw.text((x1 + 12, y2 - 24), f"+{len(metas) - 2} meta(s)", fill="#8a4f2d", font=fonte_meta)
+                draw.text((x1 + 12, y2 - 24), f"+{len(metas) - 2} meta(s)", fill=cor_titulo, font=fonte_meta)
+    
     if not metas_por_dia:
-        draw.text((margem, altura - 85), "Ainda não há metas de leitura conjunta guardadas para este mês.", fill="#8a4f2d", font=fonte_rodape)
+        draw.text((margem, altura - 85), "Ainda não há metas de leitura conjunta guardadas para este mês.", fill=cor_titulo, font=fonte_rodape)
+    
     buffer = io.BytesIO()
     imagem.save(buffer, format="PNG")
     buffer.seek(0)
@@ -186,6 +257,7 @@ def desenhar_resumo_anual(ano: int, stats: Dict) -> io.BytesIO:
 
 
 def analisar_titulo_alfabeto(titulo: str):
+    import re
     titulo_limpo = titulo.strip()
     if not titulo_limpo:
         return {"status": "INVALIDO", "letra": None}
@@ -207,6 +279,8 @@ def analisar_titulo_alfabeto(titulo: str):
         if ch.isalpha():
             return {"status": "OK", "letra": ch.upper()}
     return {"status": "INVALIDO", "letra": None}
+
+
 async def gerar_fundo_calendario(mes: str, ano: int) -> Optional[io.BytesIO]:
     """Gera uma imagem de fundo temática para o calendário usando Gemini Imagen."""
     prompts = {
