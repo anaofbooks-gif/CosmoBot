@@ -1,3 +1,4 @@
+import logging
 import discord
 from discord.ext import commands
 import unicodedata
@@ -10,6 +11,7 @@ from ai import obter_info_livro
 from images import analisar_titulo_alfabeto
 from views import ViewAvaliacao
 
+logger = logging.getLogger('CosmoBot')
 
 class ReadingCog(commands.Cog):
     def __init__(self, bot):
