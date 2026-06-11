@@ -53,12 +53,17 @@ except Exception as e:
 TIMEOUT_IA = 25  # segundos
 TIMEOUT_GROQ = 20
 
-# Modelos para fallback (Groq tem vários gratuitos)
+# Substitui a lista GROQ_MODELOS por:
+
 GROQ_MODELOS = [
-    "mixtral-8x7b-32768",  # Mais inteligente, mais lento
-    "llama3-70b-8192",      # Muito bom, rápido
-    "llama3-8b-8192",       # Mais rápido, menos preciso
-    "gemma2-9b-it",         # Google Gemma, bom equilíbrio
+    "llama-3.3-70b-versatile",  # Mais inteligente, recomendado
+    "llama-3.1-8b-instant",      # Mais rápido
+    "gemma2-9b-it",              # Google Gemma 2 (9B)
+    "mixtral-8x7b-v0.1"          # Mistral (se ainda estiver ativo)
+]
+
+# Se quiseres usar apenas um modelo confiável:
+GROQ_MODELO_PRINCIPAL = "llama-3.3-70b-versatile"
 ]
 
 
