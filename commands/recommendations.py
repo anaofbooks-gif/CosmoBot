@@ -18,7 +18,7 @@ class RecommendationsCog(commands.Cog):
     async def recomendar(self, ctx):
         """
         Recomenda livros baseados nos teus favoritos.
-        As recomendações aparecem em Português Europeu e Inglês.
+        A IA tenta recomendar uma mistura de livros em Português Europeu e Inglês.
         """
         guild = ctx.guild
         if not guild:
@@ -43,7 +43,7 @@ class RecommendationsCog(commands.Cog):
         tbr_str = ', '.join(tbr_atual[:15]) if tbr_atual else 'Nenhum'
         vistos_str = ', '.join(vistos[:15]) if vistos else 'Nenhum'
 
-        # Prompt bilíngue - pede à IA que devolva os campos em ambos os idiomas
+        # Prompt que pede explicitamente livros em Português Europeu e Inglês
         prompt = f"""És um curador literário especializado em recomendações detalhadas.
 
 O leitor adorou estes livros (4+ estrelas):
@@ -52,36 +52,33 @@ O leitor adorou estes livros (4+ estrelas):
 Sugere 3 livros NOVOS e SEMELHANTES.
 
 REGRAS OBRIGATÓRIAS:
+- **Mistura os idiomas**: tenta recomendar 1 ou 2 livros em Português Europeu (PT-PT) e 1 ou 2 em Inglês (EN)
+- Se houver boas opções em PT-PT, dá prioridade ao Português
 - Não sugerir livros já na TBR: {tbr_str}
 - Não sugerir livros já vistos: {vistos_str}
 - Livros devem ser REAIS e existentes
-- Para CADA livro, fornece TODOS os campos abaixo em AMBOS os idiomas (Português Europeu e Inglês)
+- A língua da descrição ("porque_ler") deve ser a mesma do livro (PT-PT para livros portugueses, EN para livros ingleses)
 
 RESPONDE APENAS COM JSON neste formato EXATO:
 {{"livros": [
   {{
     "titulo": "Nome exato do livro",
     "autor": "Nome do autor",
+    "idioma": "PT" ou "EN",
     "data_publicacao": "Ano de lançamento (ex: 2021)",
-    "pt": {{
-      "genero": "Género em Português Europeu",
-      "subgenero": "Subgénero em Português Europeu",
-      "porque_ler": "Motivo curto e convincente em Português Europeu (máx 200 caracteres)"
-    }},
-    "en": {{
-      "genre": "Genre in English",
-      "subgenre": "Subgenre in English",
-      "why_read": "Short convincing reason in English (max 200 chars)"
-    }},
+    "genero": "Género principal",
+    "subgenero": "Subgénero",
+    "porque_ler": "Motivo curto e convincente (no idioma do livro)",
     "link_capa": "URL da capa do livro (se conhecer, senão deixar vazio)"
   }}
 ]}}
 
 IMPORTANTE: 
-- Preenche TODOS os campos.
+- Se o idioma for PT, usa Português Europeu (pt-PT) com "género", "porquê", etc.
+- Se o idioma for EN, usa Inglês
+- Preenche TODOS os campos
 - Se não souber a data, usa "Desconhecido" / "Unknown"
 - Se não souber o link da capa, usa ""
-- Usa Português Europeu (pt-PT) no campo "pt" - com "género", "porquê", etc.
 """
 
         try:
@@ -97,30 +94,25 @@ IMPORTANTE:
             if not livros_sugeridos:
                 return await ctx.send("❌ Não consegui gerar sugestões válidas. Tenta novamente daqui a pouco.")
 
-            # Mensagem de introdução bilíngue
-            intro_pt = f"✨ **A TUA REVISTA LITERÁRIA PERSONALIZADA** ✨\n*Sugestões baseadas nos teus livros com 4⭐ ou mais:*\n" + "\n".join(f"• {l['titulo']} ({l.get('nota', 0):.1f}⭐)" for l in favoritos[:5])
-            intro_en = f"✨ **YOUR PERSONALIZED LITERARY MAGAZINE** ✨\n*Suggestions based on your 4⭐+ books:*\n" + "\n".join(f"• {l['titulo']} ({l.get('nota', 0):.1f}⭐)" for l in favoritos[:5])
+            # Conta quantos de cada idioma
+            pt_count = sum(1 for l in livros_sugeridos if l.get("idioma", "").upper() == "PT")
+            en_count = sum(1 for l in livros_sugeridos if l.get("idioma", "").upper() == "EN")
             
-            await canal.send(f"{intro_pt}\n\n{intro_en}")
+            intro = f"✨ **A TUA REVISTA LITERÁRIA PERSONALIZADA** ✨\n*Sugestões baseadas nos teus livros com 4⭐ ou mais:*\n" + "\n".join(f"• {l['titulo']} ({l.get('nota', 0):.1f}⭐)" for l in favoritos[:5])
+            intro += f"\n\n📚 **{pt_count}** sugestão(ões) em Português | **{en_count}** em Inglês"
+            
+            await canal.send(intro)
 
             titulos_botoes = []
             for livro in livros_sugeridos[:3]:
                 titulo = livro.get("titulo", "")
                 autor = livro.get("autor", "")
-                data = livro.get("data_publicacao", "Desconhecida / Unknown")
+                idioma = livro.get("idioma", "").upper()
+                data = livro.get("data_publicacao", "Desconhecido" if idioma == "PT" else "Unknown")
+                genero = livro.get("genero", "N/D" if idioma == "PT" else "N/A")
+                subgenero = livro.get("subgenero", "N/D" if idioma == "PT" else "N/A")
+                porque_ler = livro.get("porque_ler", "Uma sugestão alinhada com o teu gosto." if idioma == "PT" else "A suggestion aligned with your taste.")
                 link_capa = livro.get("link_capa", "")
-                
-                # Campos em Português
-                pt_data = livro.get("pt", {})
-                pt_genero = pt_data.get("genero", "N/D")
-                pt_subgenero = pt_data.get("subgenero", "N/D")
-                pt_porque = pt_data.get("porque_ler", "Uma sugestão alinhada com o teu gosto.")
-                
-                # Campos em Inglês
-                en_data = livro.get("en", {})
-                en_genero = en_data.get("genre", "N/A")
-                en_subgenero = en_data.get("subgenre", "N/A")
-                en_porque = en_data.get("why_read", "A suggestion aligned with your taste.")
 
                 if not titulo or not autor:
                     continue
@@ -134,44 +126,38 @@ IMPORTANTE:
 
                 titulos_botoes.append(titulo_completo)
 
-                # Embed em Português
-                embed_pt = discord.Embed(
-                    title=f"📖 {titulo_completo}",
-                    description=f"**Autor:** {autor}\n\n📅 **Publicação:** {data}\n\n{pt_porque}",
-                    color=discord.Color.from_rgb(255, 182, 193)  # rosa suave
-                )
-                embed_pt.add_field(name="🎭 Género", value=pt_genero, inline=True)
-                embed_pt.add_field(name="🧬 Subgénero", value=pt_subgenero, inline=True)
-                embed_pt.set_footer(text="🇵🇹 Português (Europeu)")
-                
-                if link_capa and link_capa.startswith("http"):
-                    embed_pt.set_thumbnail(url=link_capa)
+                # Escolher cor e bandeira conforme idioma
+                if idioma == "PT":
+                    cor = discord.Color.from_rgb(0, 150, 0)  # Verde (cores de Portugal)
+                    bandeira = "🇵🇹"
+                    label_data = "📅 Publicação"
+                    label_genero = "🎭 Género"
+                    label_sub = "🧬 Subgénero"
+                else:
+                    cor = discord.Color.blue()  # Azul para inglês
+                    bandeira = "🇬🇧"
+                    label_data = "📅 Publication"
+                    label_genero = "🎭 Genre"
+                    label_sub = "🧬 Subgenre"
 
-                # Embed em Inglês
-                embed_en = discord.Embed(
-                    title=f"📖 {titulo_completo}",
-                    description=f"**Author:** {autor}\n\n📅 **Publication:** {data}\n\n{en_porque}",
-                    color=discord.Color.blue()
+                embed = discord.Embed(
+                    title=f"📖 {titulo_completo} {bandeira}",
+                    description=f"**{'Autor' if idioma == 'EN' else 'Autor'}:** {autor}\n\n{porque_ler}",
+                    color=cor
                 )
-                embed_en.add_field(name="🎭 Genre", value=en_genero, inline=True)
-                embed_en.add_field(name="🧬 Subgenre", value=en_subgenero, inline=True)
-                embed_en.set_footer(text="🇬🇧 English")
-                
-                if link_capa and link_capa.startswith("http"):
-                    embed_en.set_thumbnail(url=link_capa)
+                embed.add_field(name=label_data, value=data, inline=True)
+                embed.add_field(name=label_genero, value=genero, inline=True)
+                embed.add_field(name=label_sub, value=subgenero, inline=True)
 
-                # Envia ambos os embeds
-                await canal.send(embed=embed_pt)
-                await canal.send(embed=embed_en)
+                if link_capa and link_capa.startswith("http"):
+                    embed.set_thumbnail(url=link_capa)
+
+                await canal.send(embed=embed)
 
             if not titulos_botoes:
                 return await ctx.send("❌ Todas as sugestões geradas já tinham sido vistas ou estão na TBR.")
 
-            # Botões bilíngues
-            await canal.send(
-                "✨ **Adiciona as tuas escolhas instantaneamente / Add your choices instantly:**",
-                view=ViewSugestoes(titulos_botoes, titulos_botoes)
-            )
+            await canal.send("✨ **Adiciona as tuas escolhas instantaneamente:**", view=ViewSugestoes(titulos_botoes, titulos_botoes))
             
             await ctx.send(f"✅ Painel visual gerado com sucesso em {canal.mention}!")
 
