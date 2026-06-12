@@ -62,9 +62,8 @@ GROQ_MODELOS = [
     "mixtral-8x7b-v0.1"          # Mistral (se ainda estiver ativo)
 ]
 
-# Se quiseres usar apenas um modelo confiável:
+# Se quiseres usar apenas um modelo confiável: 
 GROQ_MODELO_PRINCIPAL = "llama-3.3-70b-versatile"
-]
 
 
 async def ai_json_hibrido(prompt: str) -> dict:
