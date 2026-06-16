@@ -5,7 +5,7 @@ from discord.ext import commands
 import config
 from storage import dados, guardar_dados, livros_tbr_flat
 from utils import formatar_livro, livros_bem_avaliados, garantir_canal
-from ai import ai_json_hibrido
+from ai import ai_json_hibrido, validar_livro_existe
 from views import ViewSugestoes
 
 logger = logging.getLogger('CosmoBot')
@@ -43,7 +43,6 @@ class RecommendationsCog(commands.Cog):
         tbr_str = ', '.join(tbr_atual[:15]) if tbr_atual else 'Nenhum'
         vistos_str = ', '.join(vistos[:15]) if vistos else 'Nenhum'
 
-        # Prompt que pede explicitamente livros em Português Europeu e Inglês
         prompt = f"""És um curador literário especializado em recomendações detalhadas.
 
 O leitor adorou estes livros (4+ estrelas):
@@ -52,6 +51,8 @@ O leitor adorou estes livros (4+ estrelas):
 Sugere 3 livros NOVOS e SEMELHANTES.
 
 REGRAS OBRIGATÓRIAS:
+- **NÃO INVENTES LIVROS.** Se não tens a certeza que um livro existe, NÃO o recomendas.
+- **APENAS PORTUGUÊS EUROPEU (PT-PT) OU INGLÊS (EN).** NUNCA uses Português do Brasil (PT-BR).
 - **Mistura os idiomas**: tenta recomendar 1 ou 2 livros em Português Europeu (PT-PT) e 1 ou 2 em Inglês (EN)
 - Se houver boas opções em PT-PT, dá prioridade ao Português
 - Não sugerir livros já na TBR: {tbr_str}
@@ -74,7 +75,7 @@ RESPONDE APENAS COM JSON neste formato EXATO:
 ]}}
 
 IMPORTANTE: 
-- Se o idioma for PT, usa Português Europeu (pt-PT) com "género", "porquê", etc.
+- Se o idioma for PT, usa Português Europeu (pt-PT) com "género", "porquê", etc. NUNCA PT-BR.
 - Se o idioma for EN, usa Inglês
 - Preenche TODOS os campos
 - Se não souber a data, usa "Desconhecido" / "Unknown"
@@ -94,9 +95,40 @@ IMPORTANTE:
             if not livros_sugeridos:
                 return await ctx.send("❌ Não consegui gerar sugestões válidas. Tenta novamente daqui a pouco.")
 
+            # 🔥 VALIDAÇÃO: Filtra livros que não existem e bloqueia PT-BR
+            livros_validados = []
+            titulos_vistos = set()  # Para evitar duplicados entre idiomas
+            
+            for livro in livros_sugeridos:
+                titulo = livro.get("titulo", "")
+                autor = livro.get("autor", "")
+                idioma = livro.get("idioma", "").upper()
+                
+                # 🔥 BLOQUEIA PT-BR
+                if idioma not in ["PT", "EN"]:
+                    logger.warning(f"⚠️ Idioma não suportado: {idioma} para {titulo}. A ignorar...")
+                    continue
+                
+                # 🔥 VERIFICA SE O MESMO LIVRO JÁ FOI SUGERIDO NOUTRO IDIOMA
+                chave_livro = f"{titulo.lower().strip()}|{autor.lower().strip()}"
+                if chave_livro in titulos_vistos:
+                    logger.warning(f"⚠️ Livro duplicado detectado: {titulo} - {autor} (já sugerido noutro idioma). A ignorar...")
+                    continue
+                
+                # 🔥 VALIDA SE O LIVRO EXISTE NA OPEN LIBRARY
+                if not await validar_livro_existe(titulo, autor):
+                    logger.warning(f"⚠️ Livro não existe: {titulo} - {autor}. A ignorar...")
+                    continue
+                
+                titulos_vistos.add(chave_livro)
+                livros_validados.append(livro)
+
+            if not livros_validados:
+                return await ctx.send("❌ Nenhuma das sugestões geradas parece ser um livro real ou está duplicada. Tenta novamente mais tarde.")
+
             # Conta quantos de cada idioma
-            pt_count = sum(1 for l in livros_sugeridos if l.get("idioma", "").upper() == "PT")
-            en_count = sum(1 for l in livros_sugeridos if l.get("idioma", "").upper() == "EN")
+            pt_count = sum(1 for l in livros_validados if l.get("idioma", "").upper() == "PT")
+            en_count = sum(1 for l in livros_validados if l.get("idioma", "").upper() == "EN")
             
             intro = f"✨ **A TUA REVISTA LITERÁRIA PERSONALIZADA** ✨\n*Sugestões baseadas nos teus livros com 4⭐ ou mais:*\n" + "\n".join(f"• {l['titulo']} ({l.get('nota', 0):.1f}⭐)" for l in favoritos[:5])
             intro += f"\n\n📚 **{pt_count}** sugestão(ões) em Português | **{en_count}** em Inglês"
@@ -104,7 +136,7 @@ IMPORTANTE:
             await canal.send(intro)
 
             titulos_botoes = []
-            for livro in livros_sugeridos[:3]:
+            for livro in livros_validados[:3]:
                 titulo = livro.get("titulo", "")
                 autor = livro.get("autor", "")
                 idioma = livro.get("idioma", "").upper()
@@ -119,6 +151,7 @@ IMPORTANTE:
                     
                 titulo_completo = formatar_livro(titulo, autor)
 
+                # 🔥 VERIFICA SE JÁ FOI VISTO OU ESTÁ NA TBR (em QUALQUER idioma)
                 if titulo_completo.lower().strip() in {v.lower().strip() for v in vistos}:
                     continue
                 if any(titulo_completo.lower().strip() == x.lower().strip() for x in tbr_atual):
@@ -128,13 +161,13 @@ IMPORTANTE:
 
                 # Escolher cor e bandeira conforme idioma
                 if idioma == "PT":
-                    cor = discord.Color.from_rgb(0, 150, 0)  # Verde (cores de Portugal)
+                    cor = discord.Color.from_rgb(0, 150, 0)
                     bandeira = "🇵🇹"
                     label_data = "📅 Publicação"
                     label_genero = "🎭 Género"
                     label_sub = "🧬 Subgénero"
                 else:
-                    cor = discord.Color.blue()  # Azul para inglês
+                    cor = discord.Color.blue()
                     bandeira = "🇬🇧"
                     label_data = "📅 Publication"
                     label_genero = "🎭 Genre"
