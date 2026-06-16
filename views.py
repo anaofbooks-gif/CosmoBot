@@ -157,29 +157,46 @@ class ViewConfirmarLido(discord.ui.View):
         self.canal_id = canal_id
         self.livros_serie = []
         self.meses_agendados = []
-    async def detetar_serie_pos_lido(self):
+        async def detetar_serie_pos_lido(self):
+        from storage import dados, guardar_dados, livros_tbr_flat
+        from datetime import datetime
+        from ai import validar_livro_existe
+
         prompt = f'O utilizador acabou de ler o livro "{self.livro}". Se este livro fizer parte de uma série literária conhecida, identifica os PRÓXIMOS livros da série (máximo 3) que ainda não foram lidos. Responde apenas em JSON: {{"sequencias": ["Nome do Livro 2 - Autor", ...]}}'
         resposta = await ai_json_com_retry(prompt)
-        validada = validar_resposta_ia_pydantic(resposta, RespostaSerie) or validar_resposta_ia(resposta, ["sequencias"])
-        sequencias = validada.get("sequencias", []) if isinstance(validada, dict) else getattr(validada, "sequencias", [])
+        sequencias = resposta.get("sequencias", [])
         if not sequencias:
             return []
+        
         livros_nao_lidos = [seq for seq in sequencias if not livro_ja_lido(seq, dados)]
         if not livros_nao_lidos:
             return []
-        mes_atual = config.MESES_ORDEM[datetime.now().month - 1]
-        idx_mes_atual = config.MESES_ORDEM.index(mes_atual)
+
         mensagens = []
-        for i, prox in enumerate(livros_nao_lidos[:3]):
-            mes_destino = config.MESES_ORDEM[(idx_mes_atual + 1 + i) % 12]
+        for prox in livros_nao_lidos[:3]:
+            # 🔥 CORRIGIDO: Adiciona SEMPRE à TBR Geral
             if not any(prox.lower().strip() == x.lower().strip() for x in livros_tbr_flat()):
-                dados["tbr_por_mes"][mes_destino].append(prox)
-                self.livros_serie.append(prox)
-                self.meses_agendados.append(mes_destino)
-                mensagens.append(f"• **{prox}** agendado para **{mes_destino}**")
+                # 🔥 Valida se o livro existe antes de adicionar
+                try:
+                    titulo, autor = prox.rsplit(" - ", 1)
+                    if await validar_livro_existe(titulo, autor):
+                        dados["tbr_por_mes"]["Geral"].append(prox)
+                        self.livros_serie.append(prox)
+                        self.meses_agendados.append("Geral")
+                        mensagens.append(f"• **{prox}** adicionado à **TBR Geral**")
+                    else:
+                        mensagens.append(f"⚠️ **{prox}** parece não existir. Não foi adicionado.")
+                except ValueError:
+                    dados["tbr_por_mes"]["Geral"].append(prox)
+                    self.livros_serie.append(prox)
+                    self.meses_agendados.append("Geral")
+                    mensagens.append(f"• **{prox}** adicionado à **TBR Geral**")
+            else:
+                mensagens.append(f"• **{prox}** já estava na TBR")
+        
         guardar_dados()
         return mensagens
-    @discord.ui.button(label="✅ Sim, marcar como lido", style=discord.ButtonStyle.success)
+        @discord.ui.button(label="✅ Sim, marcar como lido", style=discord.ButtonStyle.success)
     async def confirmar_lido(self, interaction: discord.Interaction, button: discord.ui.Button):
         if livro_ja_lido(self.livro, dados):
             await interaction.response.send_message(f"📚 **{self.livro}** já estava registado como lido!", ephemeral=True)
