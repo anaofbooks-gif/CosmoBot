@@ -16,10 +16,6 @@ class RecommendationsCog(commands.Cog):
 
     @commands.command(name="recomendar")
     async def recomendar(self, ctx):
-        """
-        Recomenda livros baseados nos teus favoritos.
-        A IA tenta recomendar uma mistura de livros em Português Europeu e Inglês.
-        """
         guild = ctx.guild
         if not guild:
             return await ctx.send("❌ Este comando só pode ser usado dentro de um servidor.")
@@ -95,27 +91,23 @@ IMPORTANTE:
             if not livros_sugeridos:
                 return await ctx.send("❌ Não consegui gerar sugestões válidas. Tenta novamente daqui a pouco.")
 
-            # 🔥 VALIDAÇÃO: Filtra livros que não existem e bloqueia PT-BR
             livros_validados = []
-            titulos_vistos = set()  # Para evitar duplicados entre idiomas
+            titulos_vistos = set()
             
             for livro in livros_sugeridos:
                 titulo = livro.get("titulo", "")
                 autor = livro.get("autor", "")
                 idioma = livro.get("idioma", "").upper()
                 
-                # 🔥 BLOQUEIA PT-BR
                 if idioma not in ["PT", "EN"]:
                     logger.warning(f"⚠️ Idioma não suportado: {idioma} para {titulo}. A ignorar...")
                     continue
                 
-                # 🔥 VERIFICA SE O MESMO LIVRO JÁ FOI SUGERIDO NOUTRO IDIOMA
                 chave_livro = f"{titulo.lower().strip()}|{autor.lower().strip()}"
                 if chave_livro in titulos_vistos:
-                    logger.warning(f"⚠️ Livro duplicado detectado: {titulo} - {autor} (já sugerido noutro idioma). A ignorar...")
+                    logger.warning(f"⚠️ Livro duplicado detectado: {titulo} - {autor}. A ignorar...")
                     continue
                 
-                # 🔥 VALIDA SE O LIVRO EXISTE NA OPEN LIBRARY
                 if not await validar_livro_existe(titulo, autor):
                     logger.warning(f"⚠️ Livro não existe: {titulo} - {autor}. A ignorar...")
                     continue
@@ -126,7 +118,6 @@ IMPORTANTE:
             if not livros_validados:
                 return await ctx.send("❌ Nenhuma das sugestões geradas parece ser um livro real ou está duplicada. Tenta novamente mais tarde.")
 
-            # Conta quantos de cada idioma
             pt_count = sum(1 for l in livros_validados if l.get("idioma", "").upper() == "PT")
             en_count = sum(1 for l in livros_validados if l.get("idioma", "").upper() == "EN")
             
@@ -151,7 +142,6 @@ IMPORTANTE:
                     
                 titulo_completo = formatar_livro(titulo, autor)
 
-                # 🔥 VERIFICA SE JÁ FOI VISTO OU ESTÁ NA TBR (em QUALQUER idioma)
                 if titulo_completo.lower().strip() in {v.lower().strip() for v in vistos}:
                     continue
                 if any(titulo_completo.lower().strip() == x.lower().strip() for x in tbr_atual):
@@ -159,7 +149,6 @@ IMPORTANTE:
 
                 titulos_botoes.append(titulo_completo)
 
-                # Escolher cor e bandeira conforme idioma
                 if idioma == "PT":
                     cor = discord.Color.from_rgb(0, 150, 0)
                     bandeira = "🇵🇹"
