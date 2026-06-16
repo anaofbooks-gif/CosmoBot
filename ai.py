@@ -36,10 +36,12 @@ except ImportError:
 # ========== CONFIGURAÇÕES ==========
 TIMEOUT_IA = 25
 
+# 🔥 Modelos Gemini CORRETOS para o SDK google-genai (v1)
 MODELOS_GEMINI = [
-    "gemini-2.0-flash-exp",
-    "gemini-2.5-flash",
-    "gemini-1.5-flash"
+    "gemini-2.5-flash",      # Mais rápido, recomendado
+    "gemini-2.5-pro",        # Mais potente, fallback
+    "gemini-1.5-flash-002",  # Versão estável anterior (com sufixo)
+    "gemini-1.5-pro-002",    # Versão pro anterior
 ]
 
 
@@ -85,8 +87,12 @@ async def ai_json_hibrido(prompt: str) -> dict:
             logger.warning(f"⚠️ Gemini timeout com {modelo}")
             continue
         except Exception as e:
-            if "503" in str(e):
+            error_msg = str(e)
+            if "503" in error_msg:
                 logger.warning(f"⚠️ Gemini {modelo} sobrecarregado, tentando próximo...")
+                continue
+            elif "404" in error_msg:
+                logger.warning(f"⚠️ Gemini {modelo} não disponível, tentando próximo...")
                 continue
             logger.warning(f"⚠️ Gemini falhou com {modelo}: {e}")
             continue
@@ -126,8 +132,12 @@ async def ai_text_hibrido(prompt: str) -> str:
             logger.warning(f"⚠️ Gemini timeout com {modelo}")
             continue
         except Exception as e:
-            if "503" in str(e):
+            error_msg = str(e)
+            if "503" in error_msg:
                 logger.warning(f"⚠️ Gemini {modelo} sobrecarregado, tentando próximo...")
+                continue
+            elif "404" in error_msg:
+                logger.warning(f"⚠️ Gemini {modelo} não disponível, tentando próximo...")
                 continue
             logger.warning(f"⚠️ Gemini falhou com {modelo}: {e}")
             continue
@@ -230,7 +240,6 @@ async def validar_livro_existe(titulo: str, autor: str) -> bool:
     """Verifica se o livro existe na Open Library com busca flexível."""
     try:
         async with aiohttp.ClientSession() as session:
-            # Tenta várias combinações de busca
             queries = [
                 f"{titulo} {autor}",
                 titulo,
@@ -238,7 +247,6 @@ async def validar_livro_existe(titulo: str, autor: str) -> bool:
                 titulo.replace(" - ", " "),
             ]
             
-            # Remove acentos para tentar match sem eles
             titulo_sem_acentos = ''.join(c for c in unicodedata.normalize('NFKD', titulo) if not unicodedata.combining(c))
             autor_sem_acentos = ''.join(c for c in unicodedata.normalize('NFKD', autor) if not unicodedata.combining(c))
             queries.append(f"{titulo_sem_acentos} {autor_sem_acentos}")
@@ -254,7 +262,6 @@ async def validar_livro_existe(titulo: str, autor: str) -> bool:
                                 titulo_doc = doc.get("title", "").lower()
                                 autores_doc = [a.lower() for a in doc.get("author_name", [])]
                                 
-                                # Limpa os textos para comparação
                                 titulo_clean = titulo.lower().replace(" - ", " ").replace("'", " ").replace(".", "")
                                 titulo_clean = ''.join(c for c in unicodedata.normalize('NFKD', titulo_clean) if not unicodedata.combining(c))
                                 titulo_doc_clean = ''.join(c for c in unicodedata.normalize('NFKD', titulo_doc) if not unicodedata.combining(c))
@@ -286,7 +293,6 @@ async def validar_livro_existe(titulo: str, autor: str) -> bool:
     except Exception as e:
         logger.warning(f"Erro ao validar livro: {e}")
     
-    # Se a Open Library falhar, assume que o livro existe
     logger.warning(f"⚠️ Não foi possível validar {titulo} - {autor} na Open Library. Assumindo que existe.")
     return True
 
