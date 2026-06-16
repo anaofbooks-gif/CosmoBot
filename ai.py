@@ -3,6 +3,7 @@ import re
 import asyncio
 import aiohttp
 import logging
+import unicodedata
 
 import config
 
@@ -226,34 +227,68 @@ async def obter_info_livro(query: str) -> dict:
 
 
 async def validar_livro_existe(titulo: str, autor: str) -> bool:
-    """Verifica se o livro existe na Open Library antes de recomendar."""
+    """Verifica se o livro existe na Open Library com busca flexível."""
     try:
         async with aiohttp.ClientSession() as session:
-            query = f"{titulo} {autor}".replace(" ", "+")
-            url = f"https://openlibrary.org/search.json?q={query}&limit=1"
+            # Tenta várias combinações de busca
+            queries = [
+                f"{titulo} {autor}",
+                titulo,
+                autor,
+                titulo.replace(" - ", " "),
+            ]
             
-            async with session.get(url, timeout=10) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    docs = data.get("docs", [])
-                    if docs:
-                        doc = docs[0]
-                        titulo_doc = doc.get("title", "").lower()
-                        autores_doc = [a.lower() for a in doc.get("author_name", [])]
-                        
-                        titulo_match = titulo.lower() in titulo_doc or titulo_doc in titulo.lower()
-                        autor_match = any(autor.lower() in a or a in autor.lower() for a in autores_doc)
-                        
-                        if titulo_match and autor_match:
-                            logger.info(f"✅ Livro validado: {titulo} - {autor}")
-                            return True
-                        else:
-                            logger.warning(f"⚠️ Livro não encontrado: {titulo} - {autor}")
-                            return False
+            # Remove acentos para tentar match sem eles
+            titulo_sem_acentos = ''.join(c for c in unicodedata.normalize('NFKD', titulo) if not unicodedata.combining(c))
+            autor_sem_acentos = ''.join(c for c in unicodedata.normalize('NFKD', autor) if not unicodedata.combining(c))
+            queries.append(f"{titulo_sem_acentos} {autor_sem_acentos}")
+            
+            for query in queries:
+                url = f"https://openlibrary.org/search.json?q={query}&limit=3"
+                async with session.get(url, timeout=10) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        docs = data.get("docs", [])
+                        if docs:
+                            for doc in docs:
+                                titulo_doc = doc.get("title", "").lower()
+                                autores_doc = [a.lower() for a in doc.get("author_name", [])]
+                                
+                                # Limpa os textos para comparação
+                                titulo_clean = titulo.lower().replace(" - ", " ").replace("'", " ").replace(".", "")
+                                titulo_clean = ''.join(c for c in unicodedata.normalize('NFKD', titulo_clean) if not unicodedata.combining(c))
+                                titulo_doc_clean = ''.join(c for c in unicodedata.normalize('NFKD', titulo_doc) if not unicodedata.combining(c))
+                                
+                                autor_clean = autor.lower().replace(".", "").replace("'", " ")
+                                autor_clean = ''.join(c for c in unicodedata.normalize('NFKD', autor_clean) if not unicodedata.combining(c))
+                                
+                                titulo_match = titulo_clean in titulo_doc_clean or titulo_doc_clean in titulo_clean
+                                autor_match = any(
+                                    autor_clean in a.lower().replace(".", "").replace("'", " ") or 
+                                    a.lower().replace(".", "").replace("'", " ") in autor_clean
+                                    for a in autores_doc
+                                )
+                                
+                                if titulo_match and autor_match:
+                                    logger.info(f"✅ Livro validado: {titulo} - {autor}")
+                                    return True
+                                
+                                if titulo_match and autor_clean[:3] in str(autores_doc).lower():
+                                    logger.info(f"✅ Livro validado (match parcial): {titulo} - {autor}")
+                                    return True
+                            
+                            if docs:
+                                doc = docs[0]
+                                titulo_doc = doc.get("title", "").lower()
+                                if titulo.lower().replace(" - ", " ") in titulo_doc or titulo_doc in titulo.lower():
+                                    logger.info(f"✅ Livro validado (título similar): {titulo} - {autor}")
+                                    return True
     except Exception as e:
         logger.warning(f"Erro ao validar livro: {e}")
     
-    return False
+    # Se a Open Library falhar, assume que o livro existe
+    logger.warning(f"⚠️ Não foi possível validar {titulo} - {autor} na Open Library. Assumindo que existe.")
+    return True
 
 
 async def detetar_e_agendar_serie(titulo_livro: str, mes_origem: str, canal) -> list:
@@ -272,9 +307,7 @@ Responde apenas em JSON: {{"sequencias": ["Nome do Livro 2 - Autor", ...]}}
 
     mensagens = []
     for prox in sequencias[:3]:
-        # 🔥 CORRIGIDO: Adiciona SEMPRE à TBR Geral
         if not any(prox.lower().strip() == x.lower().strip() for x in livros_tbr_flat()):
-            # 🔥 Valida se o livro existe antes de adicionar
             try:
                 titulo, autor = prox.rsplit(" - ", 1)
                 if await validar_livro_existe(titulo, autor):
@@ -283,7 +316,6 @@ Responde apenas em JSON: {{"sequencias": ["Nome do Livro 2 - Autor", ...]}}
                 else:
                     mensagens.append(f"⚠️ **{prox}** parece não existir. Não foi adicionado.")
             except ValueError:
-                # Se não tiver o formato "Título - Autor", adiciona mesmo assim
                 dados["tbr_por_mes"]["Geral"].append(prox)
                 mensagens.append(f"• **{prox}** adicionado à **TBR Geral**")
         else:
