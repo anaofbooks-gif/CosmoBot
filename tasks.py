@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 from discord.ext import tasks
 
+import config
 from storage import dados, guardar_dados
 from utils import obter_canal_discord
 from stats import estatisticas_mes, estatisticas_ano
@@ -10,8 +11,15 @@ from images import desenhar_grafico_circular, desenhar_resumo_anual, Image
 
 logger = logging.getLogger('CosmoBot')
 
+# Bot global
+bot = None
 
-@tasks.loop(minutes=2)
+def set_bot(bot_instance):
+    global bot
+    bot = bot_instance
+
+# 🔥 Autosave a cada 30 segundos (mais frequente para evitar perdas)
+@tasks.loop(seconds=30)
 async def autosave_loop():
     guardar_dados()
 
@@ -51,6 +59,8 @@ async def antes_lembretes():
 
 @tasks.loop(hours=6)
 async def resumos_automaticos_loop():
+    if bot is None:
+        return
     agora = datetime.now()
     if agora.day == 1 and agora.hour == 10:
         mes_idx = agora.month - 2
@@ -85,7 +95,10 @@ async def antes_resumos():
 
 @tasks.loop(hours=1)
 async def verificar_lc_concluidas():
+    if bot is None:
+        return
     from views import ViewConfirmarLido
+    from utils import livro_ja_lido
     livros_lc = {}
     for lembrete in dados["lembretes_metas"]:
         if lembrete.get("tipo") != "lc":
