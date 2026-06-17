@@ -5,7 +5,7 @@ import re
 import asyncio
 
 import config
-from storage import dados, guardar_dados, resumo_persistencia
+from storage import dados, guardar_dados, resumo_persistencia, forcar_upload
 from utils import livro_completo, parsear_livro, formatar_livro, enviar_mensagem_longa, normalizar_titulo
 
 logger = logging.getLogger('CosmoBot')
@@ -132,7 +132,7 @@ class AdminCog(commands.Cog):
             else:
                 try:
                     _, autor = parsear_livro(livro.get("titulo", ""))
-                    auteurs.add(autor)
+                    autores.add(autor)
                 except:
                     pass
         if not autores:
@@ -152,10 +152,30 @@ class AdminCog(commands.Cog):
         embed.add_field(name="Estado atual", value=resumo_persistencia(), inline=False)
         await ctx.send(embed=embed)
 
+    # 🔥 NOVO COMANDO: Forçar upload dos dados
+    @commands.command(name="subir")
+    async def subir(self, ctx):
+        """Força o upload dos dados para a nuvem (GitHub/Supabase/JSONBin)"""
+        await ctx.send("📤 A forçar upload dos dados para a nuvem...")
+        
+        modo = modo_armazenamento()
+        if modo == "local":
+            await ctx.send("⚠️ Estás em modo **local**. Os dados só estão guardados no disco do servidor.\nConfigura GitHub, Supabase ou JSONBin para persistência na nuvem.")
+            return
+        
+        try:
+            sucesso = forcar_upload(f"Upload forçado por {ctx.author.name}")
+            if sucesso:
+                await ctx.send(f"✅ **Dados guardados com sucesso em {modo}!**\n📊 TBR: {sum(len(v) for v in dados['tbr_por_mes'].values())} livros | Lidos: {len(dados['livros_lidos'])}")
+            else:
+                await ctx.send(f"❌ Falha ao guardar dados em **{modo}**. Verifica os logs.")
+        except Exception as e:
+            await ctx.send(f"❌ Erro ao fazer upload: {e}")
+
     @commands.command(name="guia")
     async def guia(self, ctx):
         p = config.COMMAND_PREFIX
-        embed = discord.Embed(title="📖 GUIA DO COSMO", description=f"Bot de leituras com TBR, leituras conjuntas, desafios e Bookstagram.\n**Formato obrigatório dos livros:** `\"Título - Autor\"`\n\n🤖 **IA Híbrida:** Gemini + DeepSeek (fallback automático)", color=discord.Color.purple())
+        embed = discord.Embed(title="📖 GUIA DO COSMO", description=f"Bot de leituras com TBR, leituras conjuntas, desafios e Bookstagram.\n**Formato obrigatório dos livros:** `\"Título - Autor\"`\n\n🤖 **IA Híbrida:** Gemini + fallback entre modelos", color=discord.Color.purple())
         embed.add_field(name="📚 TBR", value=f"`{p}addtbr` `{p}remtbr` `{p}remtbrpos` `{p}limpartbr` `{p}verbar` `{p}tbr`", inline=False)
         embed.add_field(name="📅 Leituras Conjuntas", value=f"`{p}meta` `{p}editmeta` `{p}calendariolc` `{p}removerlc`", inline=False)
         embed.add_field(name="🏆 Desafios", value=f"`{p}lido` `{p}avaliar` `{p}reavaliar` `{p}alfabeto` `{p}addletra` `{p}remalfabeto` `{p}desafios` `{p}historico`", inline=False)
@@ -164,7 +184,7 @@ class AdminCog(commands.Cog):
         embed.add_field(name="📸 Bookstagram", value=f"`{p}desabafar` `{p}review` `{p}mencionar` `{p}gerar` `{p}trend` `{p}vibe`", inline=False)
         embed.add_field(name="📊 Estatísticas", value=f"`{p}resumomes` `{p}resumoano`", inline=False)
         embed.add_field(name="🎲 Extras", value=f"`{p}entrevista` `{p}ressaca` `{p}teoria` `{p}sprint` `{p}livroinfo`", inline=False)
-        embed.add_field(name="☁️ Sistema", value=f"`{p}dadosficheiro` `{p}armazenamento` `{p}guia`", inline=False)
+        embed.add_field(name="☁️ Sistema", value=f"`{p}dadosficheiro` `{p}armazenamento` `{p}subir` `{p}guia`", inline=False)
         embed.set_footer(text=f"Prefixo atual: {config.COMMAND_PREFIX} · Usa {config.COMMAND_PREFIX}guia para rever este painel")
         await ctx.send(embed=embed)
 
