@@ -61,7 +61,7 @@ class ReadingCog(commands.Cog):
 
         await ctx.send(f"✍️ A registar '{titulo_completo}' e a validar o Desafio A-Z...")
 
-        # 🔥 REGRA DE OURO: Se começar por artigo, NÃO entra no Desafio A-Z
+        # 🔥 REGRA DE OURO: Se começar por artigo, NÃO entra no Desafio A-Z (validação LOCAL)
         aviso_alfabeto = ""
         if tem_artigo_no_inicio(titulo_curto):
             aviso_alfabeto = f"\n⚠️ **{titulo_curto}** começa com um artigo definido/indefinido. **NÃO ENTRA** no Desafio A-Z!"
