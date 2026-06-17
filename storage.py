@@ -9,6 +9,7 @@ from urllib import error as urlerror
 from urllib import request as urlrequest
 from datetime import datetime
 import os
+import fcntl
 
 import config
 from utils import formatar_livro, estrelas_para_nota
@@ -18,6 +19,7 @@ _github_file_sha: Optional[str] = None
 _ultimo_snapshot: Optional[str] = None
 dados: Dict[str, Any] = {}
 
+# ========== FUNÇÕES DE ESTADO INICIAL ==========
 
 def estado_inicial() -> Dict[str, Any]:
     return {
@@ -154,6 +156,8 @@ def _github_get_file_sha():
         print(f"⚠️ Erro ao obter SHA do GitHub: {e}")
     return None
 
+
+# ========== FUNÇÕES DE CARREGAMENTO/GUARDA ==========
 
 def carregar_github():
     global dados
@@ -307,21 +311,47 @@ def carregar_local():
     return False
 
 
+# 🔥 VERSÃO SEGURA E ATÓMICA DE GUARDA LOCAL
 def guardar_local():
+    """Grava os dados com segurança acrescida para evitar corrupção e perdas em restarts."""
     global _ultimo_snapshot
+    
     snapshot = _snapshot_dados()
     if snapshot == _ultimo_snapshot and config.DATA_FILE.exists():
         return
+    
     try:
+        # Criar diretório se não existir
         config.DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(config.DATA_FILE, "w", encoding="utf-8") as f:
+        
+        # 1. Criar um ficheiro temporário para evitar que uma quebra de energia/restart a meio apague o original
+        temp_file = config.DATA_FILE.with_suffix('.tmp')
+        
+        with open(temp_file, 'w', encoding='utf-8') as f:
             json.dump(dados, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())  # Força o sistema operativo a gravar no disco IMEDIATAMENTE
+        
+        # 2. Fazer um backup do antigo antes de substituir
+        if config.DATA_FILE.exists():
+            backup_file = config.DATA_FILE.with_suffix('.backup.json')
+            shutil.copy2(config.DATA_FILE, backup_file)
+            print(f"📋 Backup criado em {backup_file}")
+        
+        # 3. Substituir o ficheiro oficial de forma atómica
+        temp_file.replace(config.DATA_FILE)
         _ultimo_snapshot = snapshot
+        
         print(f"💾 Dados guardados localmente em {config.DATA_FILE}")
+        
+        # Backup extra para o ficheiro de backup principal
         if config.BACKUP_FILE:
             shutil.copy(config.DATA_FILE, config.BACKUP_FILE)
+            
     except Exception as e:
-        print(f"⚠️ Erro ao guardar local: {e}")
+        print(f"❌ ERRO CRÍTICO AO GRAVAR DADOS LOCALMENTE: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def carregar_dados() -> Dict:
@@ -329,6 +359,7 @@ def carregar_dados() -> Dict:
     modo = modo_armazenamento()
     sucesso = False
     
+    # Tentar carregar da nuvem primeiro se configurado
     if modo == "github":
         sucesso = carregar_github()
     elif modo == "supabase":
@@ -338,8 +369,21 @@ def carregar_dados() -> Dict:
     elif modo == "url":
         sucesso = carregar_url()
     
+    # Se falhou na nuvem ou não há nuvem configurada, carregar local
     if not sucesso:
-        carregar_local()
+        # Tentar backup primeiro
+        if config.BACKUP_FILE.exists():
+            try:
+                with open(config.BACKUP_FILE, "r", encoding="utf-8") as f:
+                    bruto = json.load(f)
+                dados = aplicar_dados_carregados(bruto)
+                print(f"📂 Dados carregados do backup {config.BACKUP_FILE}")
+                sucesso = True
+            except Exception as e:
+                print(f"⚠️ Erro ao carregar backup: {e}")
+        
+        if not sucesso:
+            sucesso = carregar_local()
     
     if not dados:
         dados = estado_inicial()
@@ -349,26 +393,26 @@ def carregar_dados() -> Dict:
 
 
 def guardar_dados() -> None:
+    """Grava os dados localmente e na nuvem se configurado."""
     if not dados:
         return
     
-    modo = modo_armazenamento()
-    
-    # Guarda sempre localmente
-    guardar_local()
-    
-    # Guarda na nuvem se configurado
-    if modo == "github":
-        guardar_github()
-    elif modo == "supabase":
-        guardar_supabase()
-    elif modo == "jsonbin":
-        guardar_jsonbin()
-    elif modo == "url":
-        guardar_url()
+    with _dados_lock:
+        # 1. Guarda sempre localmente com segurança atómica
+        guardar_local()
+        
+        # 2. Guarda na nuvem se configurado
+        modo = modo_armazenamento()
+        if modo == "github":
+            guardar_github()
+        elif modo == "supabase":
+            guardar_supabase()
+        elif modo == "jsonbin":
+            guardar_jsonbin()
+        elif modo == "url":
+            guardar_url()
 
 
-# 🔥 NOVA FUNÇÃO: Forçar upload dos dados para a nuvem
 def forcar_upload(mensagem: str = "Upload forçado") -> bool:
     """
     Força o upload dos dados para a nuvem (GitHub/Supabase/JSONBin).
