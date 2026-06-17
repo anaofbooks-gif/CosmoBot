@@ -133,6 +133,42 @@ def canal_nome_seguro(base: str) -> str:
     texto = re.sub(r"\s+", "-", texto)
     return "".join(ch for ch in texto if ch.isalnum() or ch == "-")
 
+# ========== FUNÇÕES DO DESAFIO A-Z ==========
+
+def tem_artigo_no_inicio(titulo: str) -> bool:
+    """Verifica se o título começa estritamente com um artigo (PT/EN)."""
+    if not titulo:
+        return False
+    t = titulo.strip().lower()
+    artigos = [
+        "o ", "a ", "os ", "as ",
+        "um ", "uma ", "uns ", "umas ",
+        "the ", "a ", "an "
+    ]
+    return any(t.startswith(artigo) for artigo in artigos)
+
+
+def obter_primeira_letra_sem_artigo(titulo: str) -> Optional[str]:
+    """
+    Obtém a primeira letra do título APÓS remover artigos.
+    Se o título começar com artigo, retorna None (não é elegível).
+    """
+    if not titulo:
+        return None
+    
+    titulo_limpo = titulo.strip()
+    
+    # Se começa com artigo, NÃO é elegível
+    if tem_artigo_no_inicio(titulo_limpo):
+        return None
+    
+    # Caso contrário, devolve a primeira letra
+    for char in titulo_limpo:
+        if char.isalpha():
+            return char.upper()
+    
+    return None
+
 # ========== FUNÇÕES DE DISCORD ==========
 
 async def obter_canal_discord(canal_id: int) -> Optional[discord.abc.Messageable]:
