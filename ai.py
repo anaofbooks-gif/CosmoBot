@@ -36,12 +36,12 @@ except ImportError:
 # ========== CONFIGURAÇÕES ==========
 TIMEOUT_IA = 25
 
-# 🔥 Modelos Gemini CORRETOS para o SDK google-genai (v1)
+# Modelos Gemini disponíveis
 MODELOS_GEMINI = [
-    "gemini-2.5-flash",      # Mais rápido, recomendado
-    "gemini-2.5-pro",        # Mais potente, fallback
-    "gemini-1.5-flash-002",  # Versão estável anterior (com sufixo)
-    "gemini-1.5-pro-002",    # Versão pro anterior
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-1.5-flash-002",
+    "gemini-1.5-pro-002",
 ]
 
 
@@ -301,9 +301,18 @@ async def detetar_e_agendar_serie(titulo_livro: str, mes_origem: str, canal) -> 
     from storage import dados, guardar_dados, livros_tbr_flat
     from datetime import datetime
 
+    # 🔥 PROMPT ANTI-ALUCINAÇÃO
     prompt = f"""
+És um assistente literário especializado em séries de livros.
+
+REGRAS ABSOLUTAS:
+1. **NUNCA INVENTES LIVROS.** Se não tens a certeza absoluta que um livro existe e faz parte de uma série, NÃO o sugeres.
+2. **NUNCA INVENTES AUTORES.** Apenas autores reais.
+3. **NUNCA INVENTES TÍTULOS.** Apenas livros que existem no mundo real.
+4. **Se não souberes, responde com {{"sequencias": []}}**
+
 O utilizador adicionou o livro "{titulo_livro}" para leitura em "{mes_origem}".
-Se este livro fizer parte de uma série literária conhecida, identifica os próximos livros da série (máximo 3).
+IDENTIFICA APENAS OS PRÓXIMOS LIVROS DA SÉRIE (máximo 3) que tenham sido PUBLICADOS.
 Responde apenas em JSON: {{"sequencias": ["Nome do Livro 2 - Autor", ...]}}
 """
     resposta = await ai_json_com_retry(prompt)
