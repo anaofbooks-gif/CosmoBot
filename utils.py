@@ -136,16 +136,22 @@ def canal_nome_seguro(base: str) -> str:
 # ========== FUNÇÕES DO DESAFIO A-Z ==========
 
 def tem_artigo_no_inicio(titulo: str) -> bool:
-    """Verifica se o título começa estritamente com um artigo (PT/EN)."""
+    """
+    Verifica se o título começa estritamente com um artigo (PT/EN).
+    RETORNA True se tiver artigo -> NÃO ELEGÍVEL para o desafio.
+    """
     if not titulo:
         return False
+    
     t = titulo.strip().lower()
-    artigos = [
+    
+    artigos_proibidos = [
         "o ", "a ", "os ", "as ",
         "um ", "uma ", "uns ", "umas ",
         "the ", "a ", "an "
     ]
-    return any(t.startswith(artigo) for artigo in artigos)
+    
+    return any(t.startswith(artigo) for artigo in artigos_proibidos)
 
 
 def obter_primeira_letra_sem_artigo(titulo: str) -> Optional[str]:
@@ -158,7 +164,7 @@ def obter_primeira_letra_sem_artigo(titulo: str) -> Optional[str]:
     
     titulo_limpo = titulo.strip()
     
-    # Se começa com artigo, NÃO é elegível
+    # 🔥 REGRA DE OURO: Se começa com artigo, NÃO é elegível
     if tem_artigo_no_inicio(titulo_limpo):
         return None
     
