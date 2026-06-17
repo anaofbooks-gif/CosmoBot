@@ -6,9 +6,8 @@ from typing import Optional
 
 import config
 from storage import dados, guardar_dados, marcar_livro_sorteio_lido
-from utils import livro_completo, parsear_livro, hoje_str, este_ano, estrelas_para_texto, nota_valida, livro_ja_lido
+from utils import livro_completo, parsear_livro, hoje_str, este_ano, estrelas_para_texto, nota_valida, livro_ja_lido, tem_artigo_no_inicio, obter_primeira_letra_sem_artigo
 from ai import obter_info_livro
-from images import analisar_titulo_alfabeto
 from views import ViewAvaliacao
 
 logger = logging.getLogger('CosmoBot')
@@ -62,21 +61,20 @@ class ReadingCog(commands.Cog):
 
         await ctx.send(f"✍️ A registar '{titulo_completo}' e a validar o Desafio A-Z...")
 
-        resultado = analisar_titulo_alfabeto(titulo_curto)
+        # 🔥 REGRA DE OURO: Se começar por artigo, NÃO entra no Desafio A-Z
         aviso_alfabeto = ""
-
-        if resultado["status"] == "BANIDO":
-            aviso_alfabeto = "\n🔤 **Desafio A-Z:** Título começado por artigo. Não conta. ❌"
-        elif resultado["status"] == "OK":
-            letra = resultado["letra"]
-            if letra in dados["desafio_alfabeto"]:
-                if dados["desafio_alfabeto"][letra] == config.VAZIO_ALFABETO:
+        if tem_artigo_no_inicio(titulo_curto):
+            aviso_alfabeto = f"\n⚠️ **{titulo_curto}** começa com um artigo definido/indefinido. **NÃO ENTRA** no Desafio A-Z!"
+        else:
+            letra = obter_primeira_letra_sem_artigo(titulo_curto)
+            if letra:
+                if dados["desafio_alfabeto"].get(letra) == config.VAZIO_ALFABETO:
                     dados["desafio_alfabeto"][letra] = titulo_completo
                     aviso_alfabeto = f"\n🔤 **Desafio A-Z:** Letra **{letra}** conquistada! 🎉"
                 else:
                     aviso_alfabeto = f"\n🔤 **Desafio A-Z:** A letra **{letra}** já se encontrava preenchida por **{dados['desafio_alfabeto'][letra]}**."
-        else:
-            aviso_alfabeto = "\n⚠️ Não foi possível determinar uma letra válida para o desafio."
+            else:
+                aviso_alfabeto = "\n⚠️ Não foi possível determinar uma letra válida para o desafio."
 
         guardar_dados()
         total_lidos = len(dados["livros_lidos"])
