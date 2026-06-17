@@ -32,7 +32,7 @@ class ChallengesCog(commands.Cog):
         except ValueError:
             titulo_completo = livro.strip()
 
-        # 🔥 REGRA DE OURO: Se começar por artigo, rejeita na hora!
+        # 🔥 REGRA DE OURO: Se começar por artigo, rejeita na hora (validação LOCAL)
         if tem_artigo_no_inicio(titulo_completo):
             return await ctx.send(f"❌ O livro **\"{titulo_completo}\"** começa com um artigo definido/indefinido. Pelas regras do desafio, livros com artigos iniciais **NÃO ENTRAM** no Desafio A-Z!")
 
