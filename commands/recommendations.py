@@ -39,7 +39,8 @@ class RecommendationsCog(commands.Cog):
         tbr_str = ', '.join(tbr_atual[:15]) if tbr_atual else 'Nenhum'
         vistos_str = ', '.join(vistos[:15]) if vistos else 'Nenhum'
 
-        prompt = f"""És um curador literário especializado em recomendações detalhadas.
+        # 🔥 PROMPT REFORÇADO - PT-PT e anti-alucinação
+        prompt = f"""És um curador literário especializado em recomendações detalhadas em **Português Europeu (pt-PT)**.
 
 O leitor adorou estes livros (4+ estrelas):
 {favs_texto_str}
@@ -47,14 +48,21 @@ O leitor adorou estes livros (4+ estrelas):
 Sugere 3 livros NOVOS e SEMELHANTES.
 
 REGRAS OBRIGATÓRIAS:
-- **NÃO INVENTES LIVROS.** Se não tens a certeza que um livro existe, NÃO o recomendas.
-- **APENAS PORTUGUÊS EUROPEU (PT-PT) OU INGLÊS (EN).** NUNCA uses Português do Brasil (PT-BR).
-- **Mistura os idiomas**: tenta recomendar 1 ou 2 livros em Português Europeu (PT-PT) e 1 ou 2 em Inglês (EN)
-- Se houver boas opções em PT-PT, dá prioridade ao Português
-- Não sugerir livros já na TBR: {tbr_str}
-- Não sugerir livros já vistos: {vistos_str}
-- Livros devem ser REAIS e existentes
-- A língua da descrição ("porque_ler") deve ser a mesma do livro (PT-PT para livros portugueses, EN para livros ingleses)
+1. **NUNCA uses Português do Brasil (PT-BR)**. Usa APENAS Português Europeu (pt-PT).
+2. **NÃO INVENTES LIVROS.** Se não tens a certeza que um livro existe, NÃO o recomendas.
+3. **Mistura os idiomas**: tenta recomendar 1 ou 2 livros em Português Europeu (PT-PT) e 1 ou 2 em Inglês (EN)
+4. Não sugerir livros já na TBR: {tbr_str}
+5. Não sugerir livros já vistos: {vistos_str}
+6. Livros devem ser REAIS e existentes
+
+EXEMPLOS DE PORTUGUÊS EUROPEU (pt-PT) vs BRASILEIRO (PT-BR):
+- PT-PT: "O que achaste do livro?" | PT-BR: "O que você achou do livro?"
+- PT-PT: "Vou começar a ler hoje" | PT-BR: "Vou começar a ler hoje"
+- PT-PT: "Género" | PT-BR: "Gênero"
+- PT-PT: "Porquê" | PT-BR: "Por que"
+- PT-PT: "Ficção Científica" | PT-BR: "Ficção Científica"
+- PT-PT: "Fantasia" | PT-BR: "Fantasia"
+- PT-PT: "Romance" | PT-BR: "Romance"
 
 RESPONDE APENAS COM JSON neste formato EXATO:
 {{"livros": [
@@ -63,18 +71,20 @@ RESPONDE APENAS COM JSON neste formato EXATO:
     "autor": "Nome do autor",
     "idioma": "PT" ou "EN",
     "data_publicacao": "Ano de lançamento (ex: 2021)",
-    "genero": "Género principal",
-    "subgenero": "Subgénero",
-    "porque_ler": "Motivo curto e convincente (no idioma do livro)",
+    "genero": "Género principal em PT-PT",
+    "subgenero": "Subgénero em PT-PT",
+    "porque_ler": "Motivo curto e convincente em PT-PT (máx 200 caracteres)",
     "link_capa": "URL da capa do livro (se conhecer, senão deixar vazio)"
   }}
 ]}}
 
-IMPORTANTE: 
-- Se o idioma for PT, usa Português Europeu (pt-PT) com "género", "porquê", etc. NUNCA PT-BR.
-- Se o idioma for EN, usa Inglês
+IMPORTANTE - USO OBRIGATÓRIO DE PT-PT:
+- Escreve "género" (com acento) e nunca "gênero"
+- Escreve "porquê" e "porque" corretamente
+- Usa "tu" e "você" de forma consistente com PT-PT
+- Evita gerúndio excessivo (ex: "estou a ler" em vez de "estou lendo")
 - Preenche TODOS os campos
-- Se não souber a data, usa "Desconhecido" / "Unknown"
+- Se não souber a data, usa "Desconhecido"
 - Se não souber o link da capa, usa ""
 """
 
