@@ -1,4 +1,4 @@
-import json
+﻿import json
 import shutil
 import threading
 import base64
@@ -9,7 +9,6 @@ from urllib import error as urlerror
 from urllib import request as urlrequest
 from datetime import datetime
 import os
-import fcntl
 
 import config
 from utils import formatar_livro, estrelas_para_nota
@@ -499,3 +498,4 @@ def sorteio_mes_ativo(mes: str) -> Optional[Dict]:
         info["pendentes"] = pendentes
         return info
     return None
+
