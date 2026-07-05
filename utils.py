@@ -42,6 +42,13 @@ def livro_completo(texto: str) -> str:
 def normalizar_titulo(titulo: str) -> str:
     return re.sub(r'^[~!@#$%^&*()_+{}\[\]:;<>?/\\|]+\s*', '', titulo)
 
+def normalizar_livro_busca(texto: str) -> str:
+    texto = unicodedata.normalize("NFKD", str(texto or "").lower().strip().strip('"'))
+    texto = "".join(ch for ch in texto if not unicodedata.combining(ch))
+    texto = re.sub(r"\s*[-–—]\s*", " - ", texto)
+    texto = re.sub(r"\s+", " ", texto)
+    return texto.strip()
+
 def safe_custom_id(base: str, max_len: int = 100) -> str:
     if len(base) <= max_len:
         return base
@@ -49,8 +56,13 @@ def safe_custom_id(base: str, max_len: int = 100) -> str:
     return f"{base[:max_len-9]}_{hash_sufixo}"
 
 def livro_ja_lido(titulo_completo: str, dados: Dict) -> bool:
-    alvo = titulo_completo.lower().strip()
-    return any(l.get("titulo", "").lower().strip() == alvo for l in dados.get("livros_lidos", []))
+    alvo = normalizar_livro_busca(titulo_completo)
+    equivalentes = {alvo}
+    for principal, aliases in dados.get("aliases_livros", {}).items():
+        grupo = {normalizar_livro_busca(principal), *(normalizar_livro_busca(alias) for alias in aliases)}
+        if alvo in grupo:
+            equivalentes.update(grupo)
+    return any(normalizar_livro_busca(l.get("titulo", "")) in equivalentes for l in dados.get("livros_lidos", []))
 
 def buscar_livro_case_insensitive(lista: List[str], alvo: str) -> Optional[str]:
     alvo_lower = alvo.lower().strip()
@@ -111,8 +123,7 @@ def estrelas_para_nota(estrelas: str) -> float:
 def nota_valida(nota: float) -> bool:
     if nota < 0.25 or nota > 5:
         return False
-    quartos = nota * 4
-    return abs(quartos - round(quartos)) < 1e-9
+    return round(nota * 4) % 4 == 0
 
 # ========== FUNÇÕES DE DATA ==========
 
