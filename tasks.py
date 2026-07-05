@@ -1,11 +1,12 @@
-import asyncio
+﻿import asyncio
 import logging
+import discord
 from datetime import datetime
 from discord.ext import tasks
 
 import config
 from storage import dados, guardar_dados
-from utils import obter_canal_discord
+from utils import obter_canal_discord, set_bot_instance
 from stats import estatisticas_mes, estatisticas_ano
 from images import desenhar_grafico_circular, desenhar_resumo_anual, Image
 
@@ -17,6 +18,7 @@ bot = None
 def set_bot(bot_instance):
     global bot
     bot = bot_instance
+    set_bot_instance(bot_instance)
 
 # 🔥 Autosave a cada 30 segundos (mais frequente para evitar perdas)
 @tasks.loop(seconds=30)
@@ -130,3 +132,4 @@ async def verificar_lc_concluidas():
 @verificar_lc_concluidas.before_loop
 async def antes_verificar_lc():
     await bot.wait_until_ready()
+
