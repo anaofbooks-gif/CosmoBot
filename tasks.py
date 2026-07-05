@@ -1,7 +1,7 @@
 ﻿import asyncio
 import logging
 import discord
-from datetime import datetime
+from datetime import datetime, timedelta
 from discord.ext import tasks
 
 import config
@@ -101,35 +101,62 @@ async def verificar_lc_concluidas():
         return
     from views import ViewConfirmarLido
     from utils import livro_ja_lido
+
     livros_lc = {}
     for lembrete in dados["lembretes_metas"]:
         if lembrete.get("tipo") != "lc":
+            continue
+        if lembrete.get("lc_concluida_notificada"):
             continue
         livro = lembrete.get("livro")
         if livro not in livros_lc:
             livros_lc[livro] = {"lembretes": [], "canal_id": lembrete.get("thread_id") or lembrete.get("canal_id"), "autor": lembrete.get("autor", "")}
         livros_lc[livro]["lembretes"].append(lembrete)
+
+    alterado = False
+    hoje = datetime.now().date()
+    limite_antigo = hoje - timedelta(days=2)
+
     for livro, info in livros_lc.items():
         metas_cumpridas = 0
+        datas_validas = []
         for lembrete in info["lembretes"]:
             try:
-                if datetime.strptime(lembrete["data"], "%d/%m/%Y").date() <= datetime.now().date():
+                data_meta = datetime.strptime(lembrete["data"], "%d/%m/%Y").date()
+                datas_validas.append(data_meta)
+                if data_meta <= hoje:
                     metas_cumpridas += 1
-            except:
+            except Exception:
                 pass
-        if info.get("notificado") or metas_cumpridas < len(info["lembretes"]):
+
+        if metas_cumpridas < len(info["lembretes"]):
             continue
-        info["notificado"] = True
+
+        ultima_meta = max(datas_validas) if datas_validas else hoje
+        if ultima_meta < limite_antigo:
+            for lembrete in info["lembretes"]:
+                lembrete["lc_concluida_notificada"] = True
+            alterado = True
+            logger.info(f"LC antiga marcada como já tratada sem notificar: {livro}")
+            continue
+
         canal = await obter_canal_discord(info["canal_id"])
         if not canal:
             continue
+
         if livro_ja_lido(livro, dados):
             await canal.send(f"📚 **LC CONCLUÍDA!**\nO livro **{livro}** já está registado como lido. 🎉")
-            continue
-        await canal.send(f"🎉 **PARABÉNS! A leitura conjunta de '{livro}' foi concluída!** 🎉\n\nTodas as metas foram cumpridas. Queres registar este livro como lido?", view=ViewConfirmarLido(livro, info["autor"], info["canal_id"]))
+        else:
+            await canal.send(f"🎉 **PARABÉNS! A leitura conjunta de '{livro}' foi concluída!** 🎉\n\nTodas as metas foram cumpridas. Queres registar este livro como lido?", view=ViewConfirmarLido(livro, info["autor"], info["canal_id"]))
 
+        for lembrete in info["lembretes"]:
+            lembrete["lc_concluida_notificada"] = True
+        alterado = True
 
+    if alterado:
+        guardar_dados()
 @verificar_lc_concluidas.before_loop
 async def antes_verificar_lc():
     await bot.wait_until_ready()
+
 
