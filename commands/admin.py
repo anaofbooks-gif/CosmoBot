@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 import discord
 from discord.ext import commands
 import re
@@ -108,6 +108,30 @@ class AdminCog(commands.Cog):
         guardar_dados()
         await ctx.send(f"🗑️ **{livro_txt}** foi removido com sucesso!\n\nPodes adicionar a versão correta com `!addtbr \"Título Correto - Autor Correto\"`")
 
+    @commands.command(name="ligarlivros")
+    async def ligarlivros(self, ctx, *, argumentos: str):
+        livros = re.findall(r'"([^"]+)"', argumentos)
+        if len(livros) != 2:
+            return await ctx.send('❌ Uso correto: `!ligarlivros "Título PT - Autor" "Título EN - Autor"`')
+
+        principal, alias = [livro.strip() for livro in livros]
+        if config.SEPARADOR_LIVRO not in principal or config.SEPARADOR_LIVRO not in alias:
+            return await ctx.send('❌ Ambos os títulos devem estar no formato `"Título - Autor"`.')
+
+        aliases = dados.setdefault("aliases_livros", {})
+        grupo = set(aliases.get(principal, []))
+        grupo.add(alias)
+
+        for chave, valores in list(aliases.items()):
+            todos = {chave, *valores}
+            if principal in todos or alias in todos:
+                grupo.update(todos)
+                aliases.pop(chave, None)
+
+        grupo.discard(principal)
+        aliases[principal] = sorted(grupo)
+        guardar_dados()
+        await ctx.send(f"🔗 Vou tratar estes títulos como o mesmo livro:\n• {principal}\n• " + "\n• ".join(sorted(grupo)))
     @commands.command(name="buscar")
     async def buscar(self, ctx, *, termo: str):
         termo_busca = termo.lower().strip()
@@ -179,7 +203,7 @@ class AdminCog(commands.Cog):
         embed.add_field(name="📚 TBR", value=f"`{p}addtbr` `{p}remtbr` `{p}remtbrpos` `{p}limpartbr` `{p}verbar` `{p}tbr`", inline=False)
         embed.add_field(name="📅 Leituras Conjuntas", value=f"`{p}meta` `{p}editmeta` `{p}calendariolc` `{p}removerlc`", inline=False)
         embed.add_field(name="🏆 Desafios", value=f"`{p}lido` `{p}avaliar` `{p}reavaliar` `{p}alfabeto` `{p}addletra` `{p}remalfabeto` `{p}desafios` `{p}historico`", inline=False)
-        embed.add_field(name="✏️ Edição", value=f"`{p}editar` `{p}remover` `{p}removerlc` `{p}buscar` `{p}autores`", inline=False)
+        embed.add_field(name="✏️ Edição", value=f"`{p}editar` `{p}remover` `{p}ligarlivros` `{p}removerlc` `{p}buscar` `{p}autores`", inline=False)
         embed.add_field(name="✨ Recomendações", value=f"`{p}recomendar` `{p}marcarsugestoes`", inline=False)
         embed.add_field(name="📸 Bookstagram", value=f"`{p}desabafar` `{p}review` `{p}mencionar` `{p}gerar` `{p}trend` `{p}vibe`", inline=False)
         embed.add_field(name="📊 Estatísticas", value=f"`{p}resumomes` `{p}resumoano`", inline=False)
@@ -191,3 +215,5 @@ class AdminCog(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(AdminCog(bot))
+
+
