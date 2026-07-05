@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 import re
 import unicodedata
 import aiohttp
@@ -72,7 +72,7 @@ def _resumir_bloqueados(max_items: int = 80) -> str:
 async def _novidades_openlibrary(favoritos: list[dict], bloqueadas: set[str], limite: int = 3) -> list[dict]:
     candidatos = []
     temas = []
-    for livro in favoritos[:8]:
+    for livro in favoritos[:10]:
         genero = str(livro.get("genero", "")).split(",")[0].strip()
         if genero and genero.upper() != "N/D":
             temas.append(genero)
@@ -136,7 +136,7 @@ class RecommendationsCog(commands.Cog):
 
         bloqueadas = _chaves_bloqueadas()
         favs_texto = []
-        for livro in favoritos[:12]:
+        for livro in favoritos[:10]:
             genero = livro.get("genero", "N/D")
             favs_texto.append(f"- {livro['titulo']} (⭐{livro['nota']:.1f}, género: {genero})")
         favs_texto_str = "\n".join(favs_texto)
@@ -198,7 +198,7 @@ Formato exato:
             pt_count = sum(1 for l in livros_validados if str(l.get("idioma", "")).upper() == "PT")
             en_count = sum(1 for l in livros_validados if str(l.get("idioma", "")).upper() == "EN")
             intro = "✨ **A TUA REVISTA LITERÁRIA PERSONALIZADA** ✨\n*Sugestões baseadas nos teus livros com mais de 4⭐:*\n"
-            intro += "\n".join(f"• {l['titulo']} ({l.get('nota', 0):.1f}⭐)" for l in favoritos[:5])
+            intro += "\n".join(f"• {l['titulo']} ({l.get('nota', 0):.1f}⭐)" for l in favoritos[:10])
             intro += f"\n\n📚 **{pt_count}** sugestão(ões) em Português | **{en_count}** em Inglês"
             await canal.send(intro)
 
@@ -273,3 +273,5 @@ Formato exato:
 
 async def setup(bot):
     await bot.add_cog(RecommendationsCog(bot))
+
+
