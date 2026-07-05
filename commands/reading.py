@@ -2,6 +2,7 @@
 import discord
 from discord.ext import commands
 import unicodedata
+import re
 from typing import Optional
 
 import config
@@ -11,6 +12,12 @@ from ai import obter_info_livro
 from views import ViewAvaliacao
 
 logger = logging.getLogger('CosmoBot')
+
+def normalizar_livro_busca(texto: str) -> str:
+    texto = str(texto or "").lower().strip().strip('"')
+    texto = re.sub(r"\s*[-–—]\s*", " - ", texto)
+    texto = re.sub(r"\s+", " ", texto)
+    return texto
 
 class ReadingCog(commands.Cog):
     def __init__(self, bot):
@@ -118,15 +125,15 @@ class ReadingCog(commands.Cog):
 
         livro_encontrado = None
         if titulo_livro:
-            titulo_alvo = titulo_livro.lower().strip().strip('"')
+            titulo_alvo = normalizar_livro_busca(titulo_livro)
             for livro in dados["livros_lidos"]:
-                titulo_guardado = livro.get("titulo", "").lower().strip()
+                titulo_guardado = normalizar_livro_busca(livro.get("titulo", ""))
                 if titulo_guardado == titulo_alvo:
                     livro_encontrado = livro
                     break
             if not livro_encontrado:
                 for livro in dados["livros_lidos"]:
-                    titulo_guardado = livro.get("titulo", "").lower().strip()
+                    titulo_guardado = normalizar_livro_busca(livro.get("titulo", ""))
                     if titulo_alvo in titulo_guardado or titulo_guardado in titulo_alvo:
                         livro_encontrado = livro
                         break
@@ -164,7 +171,7 @@ class ReadingCog(commands.Cog):
         if not nota_valida(nota):
             return await ctx.send("❌ A nota deve ser entre 0.25 e 5, em passos de 0.25.")
 
-        titulo_alvo = titulo_candidato.lower().strip()
+        titulo_alvo = normalizar_livro_busca(titulo_candidato)
         livro_encontrado = None
 
         for livro in dados["livros_lidos"]:
@@ -221,4 +228,5 @@ class ReadingCog(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(ReadingCog(bot))
+
 
