@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 import discord
 from discord.ext import commands
 import unicodedata
@@ -88,42 +88,65 @@ class ReadingCog(commands.Cog):
         )
 
     @commands.command(name="avaliar")
-    async def avaliar(self, ctx, nota: str, *, titulo_livro: Optional[str] = None):
-        try:
-            nota_float = float(nota.replace(',', '.'))
-        except ValueError:
-            return await ctx.send("❌ Nota inválida. Exemplo: `4.5` ou `3.75`")
+    async def avaliar(self, ctx, *, argumentos: str = ""):
+        partes = argumentos.strip().split()
+        if not partes:
+            return await ctx.send("❌ Uso correto: `!avaliar 3.25` ou `!avaliar \"Título - Autor\" 3.25`")
+
+        nota_texto = None
+        titulo_livro = None
+
+        for idx in (0, len(partes) - 1):
+            candidato = partes[idx].replace(',', '.')
+            try:
+                float(candidato)
+                nota_texto = candidato
+                if idx == 0:
+                    titulo_livro = " ".join(partes[1:]).strip() or None
+                else:
+                    titulo_livro = " ".join(partes[:-1]).strip() or None
+                break
+            except ValueError:
+                continue
+
+        if nota_texto is None:
+            return await ctx.send("❌ Nota inválida. Exemplos: `!avaliar 3.25` ou `!avaliar \"Hallowed Ground - Rebecca Yarros\" 3.25`")
+
+        nota_float = float(nota_texto)
         if not nota_valida(nota_float):
             return await ctx.send("❌ A nota deve ser entre 0.25 e 5, em passos de 0.25.")
 
         livro_encontrado = None
         if titulo_livro:
-            try:
-                titulo_completo = livro_completo(titulo_livro)
+            titulo_alvo = titulo_livro.lower().strip().strip('"')
+            for livro in dados["livros_lidos"]:
+                titulo_guardado = livro.get("titulo", "").lower().strip()
+                if titulo_guardado == titulo_alvo:
+                    livro_encontrado = livro
+                    break
+            if not livro_encontrado:
                 for livro in dados["livros_lidos"]:
-                    if livro.get("titulo", "").lower().strip() == titulo_completo.lower().strip():
+                    titulo_guardado = livro.get("titulo", "").lower().strip()
+                    if titulo_alvo in titulo_guardado or titulo_guardado in titulo_alvo:
                         livro_encontrado = livro
                         break
-            except ValueError:
-                pass
+            if not livro_encontrado:
+                sugestoes = [f"• {l.get('titulo', 'Desconhecido')}" for l in dados["livros_lidos"][-5:]]
+                return await ctx.send(f"❌ Não encontrei o livro **{titulo_livro}** no teu histórico.\n\n**Últimos livros lidos:**\n" + "\n".join(sugestoes))
 
         if not livro_encontrado:
             if not dados["livros_lidos"]:
                 return await ctx.send("❌ Ainda não registaste nenhum livro lido para avaliar.")
             livro_encontrado = dados["livros_lidos"][-1]
 
-        nota_antiga = livro_encontrado.get("nota", 0.0)
         estrelas_antigas = livro_encontrado.get("estrelas", "Sem avaliação")
-
         livro_encontrado["nota"] = nota_float
         livro_encontrado["estrelas"] = estrelas_para_texto(nota_float)
         guardar_dados()
 
-        titulo_livro_nome = livro_encontrado.get("titulo", "Livro")
-
         await ctx.send(
             f"🎨 **Avaliação guardada!**\n"
-            f"📖 {titulo_livro_nome}\n"
+            f"📖 {livro_encontrado.get('titulo', 'Livro')}\n"
             f"⭐ Antiga: {estrelas_antigas} → ⭐ Nova: {livro_encontrado['estrelas']}"
         )
 
@@ -198,3 +221,4 @@ class ReadingCog(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(ReadingCog(bot))
+
