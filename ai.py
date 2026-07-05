@@ -51,9 +51,145 @@ for modelo in ["gemini-2.0-flash"]:
     if modelo not in MODELOS_GEMINI:
         MODELOS_GEMINI.append(modelo)
 
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", getattr(config, "GROQ_API_KEY", ""))
+GROQ_MODELS = [m.strip() for m in os.getenv("GROQ_MODELS", os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")).split(",") if m.strip()]
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_MODELS = [m.strip() for m in os.getenv("OPENROUTER_MODELS", os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free")).split(",") if m.strip()]
+
+
+def _extrair_json(txt: str) -> dict:
+    txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.IGNORECASE)
+    try:
+        return json.loads(txt)
+    except json.JSONDecodeError:
+        inicio = txt.find("{")
+        fim = txt.rfind("}")
+        if inicio < 0 or fim <= inicio:
+            raise
+        return json.loads(txt[inicio:fim + 1])
+
+
+async def _chat_completion(
+    *,
+    provider: str,
+    url: str,
+    api_key: str,
+    model: str,
+    prompt: str,
+    json_mode: bool,
+    temperature: float,
+) -> str:
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    if provider == "OpenRouter":
+        headers["HTTP-Referer"] = os.getenv("OPENROUTER_SITE_URL", "https://railway.app")
+        headers["X-Title"] = os.getenv("OPENROUTER_APP_NAME", "CosmoBot")
+
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temperature,
+    }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, headers=headers, json=payload, timeout=TIMEOUT_IA) as resp:
+            texto = await resp.text()
+            if resp.status >= 400:
+                raise RuntimeError(f"{provider} {model} HTTP {resp.status}: {texto[:500]}")
+            data = json.loads(texto)
+            return data["choices"][0]["message"]["content"] or ""
+
+
+async def _groq_json(prompt: str) -> dict:
+    if not GROQ_API_KEY:
+        return {}
+    for modelo in GROQ_MODELS:
+        try:
+            txt = await _chat_completion(
+                provider="Groq",
+                url="https://api.groq.com/openai/v1/chat/completions",
+                api_key=GROQ_API_KEY,
+                model=modelo,
+                prompt=prompt,
+                json_mode=True,
+                temperature=0.2,
+            )
+            logger.info(f"✅ Groq respondeu (JSON) com modelo {modelo}")
+            return _extrair_json(txt)
+        except Exception as e:
+            logger.warning(f"⚠️ Groq falhou com {modelo}: {e}")
+    return {}
+
+
+async def _groq_text(prompt: str) -> str:
+    if not GROQ_API_KEY:
+        return ""
+    for modelo in GROQ_MODELS:
+        try:
+            txt = await _chat_completion(
+                provider="Groq",
+                url="https://api.groq.com/openai/v1/chat/completions",
+                api_key=GROQ_API_KEY,
+                model=modelo,
+                prompt=prompt,
+                json_mode=False,
+                temperature=0.7,
+            )
+            logger.info(f"✅ Groq respondeu (texto) com modelo {modelo}")
+            return txt
+        except Exception as e:
+            logger.warning(f"⚠️ Groq falhou com {modelo}: {e}")
+    return ""
+
+
+async def _openrouter_json(prompt: str) -> dict:
+    if not OPENROUTER_API_KEY:
+        return {}
+    for modelo in OPENROUTER_MODELS:
+        try:
+            txt = await _chat_completion(
+                provider="OpenRouter",
+                url="https://openrouter.ai/api/v1/chat/completions",
+                api_key=OPENROUTER_API_KEY,
+                model=modelo,
+                prompt=prompt,
+                json_mode=True,
+                temperature=0.2,
+            )
+            logger.info(f"✅ OpenRouter respondeu (JSON) com modelo {modelo}")
+            return _extrair_json(txt)
+        except Exception as e:
+            logger.warning(f"⚠️ OpenRouter falhou com {modelo}: {e}")
+    return {}
+
+
+async def _openrouter_text(prompt: str) -> str:
+    if not OPENROUTER_API_KEY:
+        return ""
+    for modelo in OPENROUTER_MODELS:
+        try:
+            txt = await _chat_completion(
+                provider="OpenRouter",
+                url="https://openrouter.ai/api/v1/chat/completions",
+                api_key=OPENROUTER_API_KEY,
+                model=modelo,
+                prompt=prompt,
+                json_mode=False,
+                temperature=0.7,
+            )
+            logger.info(f"✅ OpenRouter respondeu (texto) com modelo {modelo}")
+            return txt
+        except Exception as e:
+            logger.warning(f"⚠️ OpenRouter falhou com {modelo}: {e}")
+    return ""
+
 
 async def ai_json_hibrido(prompt: str) -> dict:
-    """Tenta Gemini com fallback entre modelos"""
+    """Tenta Gemini, Groq e OpenRouter com fallback entre modelos."""
     
     for modelo in MODELOS_GEMINI:
         if not GEMINI_DISPONIVEL:
@@ -86,15 +222,7 @@ async def ai_json_hibrido(prompt: str) -> dict:
                 )
                 txt = response.text if response.text else "{}"
             
-            txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.IGNORECASE)
-            try:
-                resultado = json.loads(txt)
-            except json.JSONDecodeError:
-                inicio = txt.find("{")
-                fim = txt.rfind("}")
-                if inicio < 0 or fim <= inicio:
-                    raise
-                resultado = json.loads(txt[inicio:fim + 1])
+            resultado = _extrair_json(txt)
             logger.info(f"✅ Gemini respondeu (JSON) com modelo {modelo}")
             return resultado
             
@@ -112,11 +240,19 @@ async def ai_json_hibrido(prompt: str) -> dict:
             logger.warning(f"⚠️ Gemini falhou com {modelo}: {e}")
             continue
     
+    resultado = await _groq_json(prompt)
+    if resultado:
+        return resultado
+
+    resultado = await _openrouter_json(prompt)
+    if resultado:
+        return resultado
+
     return {}
 
 
 async def ai_text_hibrido(prompt: str) -> str:
-    """Tenta Gemini com fallback entre modelos"""
+    """Tenta Gemini, Groq e OpenRouter com fallback entre modelos."""
     
     for modelo in MODELOS_GEMINI:
         if not GEMINI_DISPONIVEL:
@@ -157,6 +293,14 @@ async def ai_text_hibrido(prompt: str) -> str:
             logger.warning(f"⚠️ Gemini falhou com {modelo}: {e}")
             continue
     
+    resultado = await _groq_text(prompt)
+    if resultado:
+        return resultado
+
+    resultado = await _openrouter_text(prompt)
+    if resultado:
+        return resultado
+
     return "❌ Nenhuma IA disponível. Tenta novamente mais tarde."
 
 
