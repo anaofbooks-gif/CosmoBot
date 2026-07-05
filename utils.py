@@ -217,3 +217,4 @@ async def garantir_canal(guild: discord.Guild, nome: str) -> discord.TextChannel
         return canal
     return await guild.create_text_channel(nome)
 
+
