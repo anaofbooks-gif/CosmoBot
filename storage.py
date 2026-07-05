@@ -27,6 +27,7 @@ def estado_inicial() -> Dict[str, Any]:
         "review_em_andamento": {},
         "lembretes_metas": [],
         "sugestoes_vistas": [],
+        "aliases_livros": {},
         "sorteios_mes": {},
         "tbr_por_mes": {
             "Geral": [],
@@ -77,6 +78,7 @@ def aplicar_dados_carregados(bruto: Dict) -> Dict:
         **(bruto.get("desafio_alfabeto") if isinstance(bruto.get("desafio_alfabeto"), dict) else {})
     }
     base["sugestoes_vistas"] = list(bruto.get("sugestoes_vistas", []))
+    base["aliases_livros"] = dict(bruto.get("aliases_livros", {})) if isinstance(bruto.get("aliases_livros", {}), dict) else {}
     base["sorteios_mes"] = dict(bruto.get("sorteios_mes", {}))
     base["livros_lidos"] = migrar_livros_lidos(bruto.get("livros_lidos", []))
     base["lembretes_metas"] = list(bruto.get("lembretes_metas", []))
@@ -514,3 +516,4 @@ def sorteio_mes_ativo(mes: str) -> Optional[Dict]:
         info["pendentes"] = pendentes
         return info
     return None
+
