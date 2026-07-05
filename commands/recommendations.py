@@ -145,12 +145,12 @@ class RecommendationsCog(commands.Cog):
         if not guild:
             return await ctx.send("❌ Este comando só pode ser usado dentro de um servidor.")
 
-        favoritos = livros_bem_avaliados(dados, 4.01)
+        favoritos = livros_bem_avaliados(dados, 4.0)
         if not favoritos:
-            return await ctx.send("📭 Ainda não tens livros avaliados com **mais de 4 estrelas**.\nRegista leituras com `!lido \"Título - Autor\"` e avalia com o menu de estrelas ou `!avaliar 4.5`.")
+            return await ctx.send("📭 Ainda não tens livros avaliados com **4 estrelas ou mais**.\nRegista leituras com `!lido \"Título - Autor\"` e avalia com o menu de estrelas ou `!avaliar 4.5`.")
 
         canal = await garantir_canal(guild, "sugestoes-leitura")
-        await ctx.send(f"🔍 A preparar sugestões com base em **{len(favoritos)}** livro(s) muito bem avaliado(s) em {canal.mention}...")
+        await ctx.send(f"🔍 A preparar sugestões com base em **{len(favoritos)}** livro(s) bem avaliado(s) em {canal.mention}...")
 
         bloqueadas = _chaves_bloqueadas()
         favs_texto = []
@@ -162,7 +162,7 @@ class RecommendationsCog(commands.Cog):
 
         prompt = f"""És um curador literário cuidadoso. Responde em Português Europeu (pt-PT).
 
-O leitor adorou estes livros, todos avaliados com mais de 4 estrelas:
+O leitor adorou estes livros, todos avaliados com 4 estrelas ou mais:
 {favs_texto_str}
 
 Sugere 6 livros REAIS para eu filtrar e mostrar 3. Quero sobretudo livros em inglês e, quando existir uma edição portuguesa de Portugal, também podes incluir português europeu.
@@ -234,7 +234,7 @@ Formato exato:
 
             pt_count = sum(1 for l in livros_validados if str(l.get("idioma", "")).upper() == "PT-PT")
             en_count = sum(1 for l in livros_validados if str(l.get("idioma", "")).upper() == "EN")
-            intro = "✨ **A TUA REVISTA LITERÁRIA PERSONALIZADA** ✨\n*Sugestões baseadas nos teus livros com mais de 4⭐:*\n"
+            intro = "✨ **A TUA REVISTA LITERÁRIA PERSONALIZADA** ✨\n*Sugestões baseadas nos teus livros com 4⭐ ou mais:*\n"
             intro += "\n".join(f"• {l['titulo']} ({l.get('nota', 0):.1f}⭐)" for l in favoritos[:10])
             intro += f"\n\n📚 **{pt_count}** sugestão(ões) em PT-PT | **{en_count}** em Inglês"
             await canal.send(intro)
@@ -312,5 +312,6 @@ Formato exato:
 
 async def setup(bot):
     await bot.add_cog(RecommendationsCog(bot))
+
 
 
