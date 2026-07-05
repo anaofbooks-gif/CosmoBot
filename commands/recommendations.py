@@ -45,6 +45,10 @@ def _chaves_bloqueadas() -> set[str]:
         bloqueadas.update(_chaves_livro(livro))
     for livro in dados.get("sugestoes_vistas", []):
         bloqueadas.update(_chaves_livro(livro))
+    for principal, aliases in dados.get("aliases_livros", {}).items():
+        bloqueadas.update(_chaves_livro(principal))
+        for alias in aliases:
+            bloqueadas.update(_chaves_livro(alias))
     return bloqueadas
 
 
