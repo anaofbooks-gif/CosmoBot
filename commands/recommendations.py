@@ -52,6 +52,20 @@ def _esta_bloqueado(titulo: str, autor: str, bloqueadas: set[str]) -> bool:
     return bool(_chaves_livro(titulo, autor) & bloqueadas)
 
 
+def _parece_ptbr(livro: dict) -> bool:
+    campos = [
+        livro.get("idioma", ""),
+        livro.get("variante", ""),
+        livro.get("mercado", ""),
+        livro.get("editora", ""),
+        livro.get("observacoes", ""),
+        livro.get("porque_ler", ""),
+    ]
+    texto = _normalizar_chave(" ".join(str(campo) for campo in campos))
+    termos_ptbr = {"pt br", "ptbr", "br", "brasil", "brasileiro", "brasileira"}
+    return any(termo in texto.split() or termo in texto for termo in termos_ptbr)
+
+
 def _resumir_bloqueados(max_items: int = 80) -> str:
     itens = []
     for livro in dados.get("livros_lidos", []):
@@ -147,17 +161,29 @@ class RecommendationsCog(commands.Cog):
 O leitor adorou estes livros, todos avaliados com mais de 4 estrelas:
 {favs_texto_str}
 
-Sugere 6 livros REAIS para eu filtrar e mostrar 3. Quero uma mistura de português e inglês, incluindo novidades/recentes quando fizer sentido.
+Sugere 6 livros REAIS para eu filtrar e mostrar 3. Quero sobretudo livros em inglês e, quando existir uma edição portuguesa de Portugal, também podes incluir português europeu.
 
 REGRAS OBRIGATÓRIAS:
 1. Não inventes livros, autores, datas ou capas.
 2. Não sugiras livros já lidos, na TBR, favoritos acima, ou arquivados nesta lista: {bloqueados_str}
-3. Inclui pelo menos 2 livros em inglês e tenta incluir pelo menos 1 livro em português.
-4. Inclui pelo menos 2 livros publicados nos últimos 5 anos, se existirem opções reais compatíveis.
-5. Usa apenas JSON válido, sem markdown.
+3. Não sugiras livros em PT-BR, edições brasileiras, títulos brasileiros ou mercado brasileiro.
+4. Se um livro só existir em português do Brasil, escolhe antes a edição em inglês ou outro livro.
+5. Inclui pelo menos 2 livros em inglês. Só inclui português se for PT-PT/edição portuguesa.
+6. Inclui pelo menos 2 livros publicados nos últimos 5 anos, se existirem opções reais compatíveis.
+7. Usa apenas JSON válido, sem markdown.
+
+IDIOMAS ACEITES:
+- "EN" para inglês.
+- "PT-PT" apenas para português europeu/edição portuguesa.
+- Nunca uses "PT", "PT-BR", "BR" ou "Português do Brasil".
+
+PORTUGUÊS:
+- Todo o texto explicativo deve estar em português europeu.
+- Escreve "género", "publicação", "sugestão", "tu".
+- Evita palavras/formas brasileiras como "você", "gênero", "lançamento" quando significar publicação.
 
 Formato exato:
-{{"livros": [{{"titulo": "Nome exato", "autor": "Nome do autor", "idioma": "PT" ou "EN", "data_publicacao": "Ano", "genero": "Género", "subgenero": "Subgénero", "porque_ler": "Motivo curto em pt-PT", "link_capa": "URL ou vazio"}}]}}
+{{"livros": [{{"titulo": "Nome exato", "autor": "Nome do autor", "idioma": "PT-PT" ou "EN", "data_publicacao": "Ano", "genero": "Género", "subgenero": "Subgénero", "porque_ler": "Motivo curto em pt-PT", "link_capa": "URL ou vazio"}}]}}
 """
 
         try:
@@ -172,7 +198,13 @@ Formato exato:
                 titulo = str(livro.get("titulo", "")).strip()
                 autor = str(livro.get("autor", "")).strip()
                 idioma = str(livro.get("idioma", "")).upper().strip()
-                if not titulo or not autor or idioma not in {"PT", "EN"}:
+                if idioma == "PT_PT":
+                    idioma = "PT-PT"
+                if not titulo or not autor or idioma not in {"PT-PT", "EN"}:
+                    logger.info(f"Sugestão ignorada por idioma não aceite: {titulo} - {autor} ({idioma})")
+                    continue
+                if _parece_ptbr(livro):
+                    logger.info(f"Sugestão PT-BR bloqueada: {titulo} - {autor}")
                     continue
                 if _esta_bloqueado(titulo, autor, bloqueadas):
                     logger.info(f"Sugestão bloqueada por já existir/estar arquivada: {titulo} - {autor}")
@@ -185,6 +217,7 @@ Formato exato:
                     continue
                 titulos_vistos.add(chave_livro)
                 bloqueadas.update(_chaves_livro(titulo, autor))
+                livro["idioma"] = idioma
                 livros_validados.append(livro)
                 if len(livros_validados) >= 3:
                     break
@@ -195,11 +228,11 @@ Formato exato:
             if not livros_validados:
                 return await ctx.send("❌ Não consegui encontrar sugestões reais que não estivessem lidas, na TBR ou arquivadas. Tenta novamente mais tarde.")
 
-            pt_count = sum(1 for l in livros_validados if str(l.get("idioma", "")).upper() == "PT")
+            pt_count = sum(1 for l in livros_validados if str(l.get("idioma", "")).upper() == "PT-PT")
             en_count = sum(1 for l in livros_validados if str(l.get("idioma", "")).upper() == "EN")
             intro = "✨ **A TUA REVISTA LITERÁRIA PERSONALIZADA** ✨\n*Sugestões baseadas nos teus livros com mais de 4⭐:*\n"
             intro += "\n".join(f"• {l['titulo']} ({l.get('nota', 0):.1f}⭐)" for l in favoritos[:10])
-            intro += f"\n\n📚 **{pt_count}** sugestão(ões) em Português | **{en_count}** em Inglês"
+            intro += f"\n\n📚 **{pt_count}** sugestão(ões) em PT-PT | **{en_count}** em Inglês"
             await canal.send(intro)
 
             titulos_botoes = []
@@ -207,6 +240,8 @@ Formato exato:
                 titulo = str(livro.get("titulo", "")).strip()
                 autor = str(livro.get("autor", "")).strip()
                 idioma = str(livro.get("idioma", "")).upper().strip()
+                if idioma == "PT_PT":
+                    idioma = "PT-PT"
                 data = livro.get("data_publicacao", "Desconhecido")
                 genero = livro.get("genero", "N/D")
                 subgenero = livro.get("subgenero", "N/D")
@@ -215,7 +250,7 @@ Formato exato:
                 titulo_completo = formatar_livro(titulo, autor)
                 titulos_botoes.append(titulo_completo)
 
-                if idioma == "PT":
+                if idioma == "PT-PT":
                     cor = discord.Color.from_rgb(0, 150, 0)
                     bandeira = "🇵🇹"
                     label_data = "📅 Publicação"
