@@ -1,10 +1,17 @@
-import re
+﻿import re
 import unicodedata
 import hashlib
 from datetime import datetime
 from typing import List, Optional, Tuple, Dict, Any
 import discord
 import config
+
+_bot_instance = None
+
+
+def set_bot_instance(bot):
+    global _bot_instance
+    _bot_instance = bot
 
 # ========== FUNÇÕES DE LIVROS ==========
 
@@ -178,13 +185,16 @@ def obter_primeira_letra_sem_artigo(titulo: str) -> Optional[str]:
 # ========== FUNÇÕES DE DISCORD ==========
 
 async def obter_canal_discord(canal_id: int) -> Optional[discord.abc.Messageable]:
-    from main import bot
-    canal = bot.get_channel(canal_id)
+    if not canal_id or _bot_instance is None:
+        return None
+    canal = _bot_instance.get_channel(int(canal_id))
     if canal:
         return canal
+    if not _bot_instance.is_ready():
+        return None
     try:
-        return await bot.fetch_channel(canal_id)
-    except (discord.NotFound, discord.HTTPException):
+        return await _bot_instance.fetch_channel(int(canal_id))
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException, AttributeError, TypeError, ValueError):
         return None
 
 async def enviar_mensagem_longa(canal: discord.abc.Messageable, texto: str, limite: int = 1900) -> None:
@@ -206,3 +216,4 @@ async def garantir_canal(guild: discord.Guild, nome: str) -> discord.TextChannel
     if canal:
         return canal
     return await guild.create_text_channel(nome)
+
