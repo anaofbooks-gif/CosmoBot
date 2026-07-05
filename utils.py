@@ -111,7 +111,8 @@ def estrelas_para_nota(estrelas: str) -> float:
 def nota_valida(nota: float) -> bool:
     if nota < 0.25 or nota > 5:
         return False
-    return round(nota * 4) % 4 == 0
+    quartos = nota * 4
+    return abs(quartos - round(quartos)) < 1e-9
 
 # ========== FUNÇÕES DE DATA ==========
 
